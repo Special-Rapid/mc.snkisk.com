@@ -732,7 +732,7 @@ body.survival-detail-page #cta[data-cta-variant="survival-portal"] .survival-cta
     inset: 0;
     background:
         linear-gradient(180deg, rgba(28, 20, 10, 0.14), rgba(28, 20, 10, 0.7)),
-        url("https://images.snkisk.com/WebD_Minecraft_Site/images/d34d83ad-77e7-4283-b365-43e6a881acf0.png") center center / cover no-repeat;
+        url("../assets/images/d34d83ad-77e7-4283-b365-43e6a881acf0.webp") center center / cover no-repeat;
     filter: saturate(1.02);
 }
 

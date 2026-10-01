@@ -25,17 +25,6 @@
         wrapper.classList.toggle("is-media-error", state === "error");
     }
 
-    function setRetryButton(wrapper, isVisible, isBusy) {
-        const retryButton = wrapper.querySelector(".skeleton-media__retry");
-
-        if (!retryButton) {
-            return;
-        }
-
-        retryButton.hidden = !isVisible;
-        retryButton.disabled = Boolean(isBusy);
-    }
-
     function getOriginalSource(media) {
         if (!media.dataset.skeletonOriginalSrc) {
             media.dataset.skeletonOriginalSrc = media.currentSrc || media.getAttribute("src") || "";
@@ -63,7 +52,6 @@
         }
 
         setState(wrapper, "loading");
-        setRetryButton(wrapper, false, true);
 
         if (media instanceof HTMLImageElement) {
             media.src = getRetrySource(originalSrc);
@@ -82,7 +70,10 @@
         const shouldForce = Boolean(options && options.force);
         const media = wrapper.querySelector(MEDIA_SELECTOR);
         const ratio = normalizeRatio(wrapper.getAttribute("data-skeleton-ratio"));
-        const retryButton = wrapper.querySelector(".skeleton-media__retry");
+        let retryButton = null;
+        let errorStatus = null;
+        let retryBusy = false;
+        let restoreTabIndex = null;
         const previousMedia = wrapper.__siteSkeletonMedia;
 
         if (!shouldForce && wrapper.dataset.skeletonUiInitialized === "true" && previousMedia === media) {
@@ -94,21 +85,69 @@
             wrapper.__siteSkeletonCleanup = null;
         }
 
+        const clearErrorUI = () => {
+            if (retryButton && document.activeElement === retryButton && media) {
+                const originalTabIndex = media.getAttribute("tabindex");
+                media.setAttribute("tabindex", "-1");
+                media.focus({ preventScroll: true });
+                restoreTabIndex = () => {
+                    if (originalTabIndex === null) media.removeAttribute("tabindex");
+                    else media.setAttribute("tabindex", originalTabIndex);
+                    media.removeEventListener("blur", restoreTabIndex);
+                    restoreTabIndex = null;
+                };
+                media.addEventListener("blur", restoreTabIndex);
+            }
+            if (retryButton) retryButton.remove();
+            if (errorStatus) errorStatus.remove();
+            retryButton = null;
+            errorStatus = null;
+            retryBusy = false;
+        };
+
+        const showErrorUI = () => {
+            const kind = media instanceof HTMLVideoElement ? "動画" : "画像";
+            if (!retryButton) {
+                errorStatus = document.createElement("span");
+                errorStatus.className = "skeleton-media__status";
+                errorStatus.setAttribute("role", "status");
+                wrapper.appendChild(errorStatus);
+                retryButton = document.createElement("button");
+                retryButton.type = "button";
+                retryButton.className = "skeleton-media__retry";
+                retryButton.setAttribute("aria-label", `${media.getAttribute("alt") || kind}を再読み込み`);
+                retryButton.addEventListener("click", () => {
+                    if (retryBusy || !getOriginalSource(media)) return;
+                    retryBusy = true;
+                    retryButton.setAttribute("aria-disabled", "true");
+                    retryButton.textContent = "再読み込み中…";
+                    errorStatus.textContent = `${kind}を再読み込み中です。`;
+                    wrapper.setAttribute("aria-busy", "true");
+                    retryMedia(media, wrapper);
+                });
+                wrapper.appendChild(retryButton);
+            }
+            retryBusy = false;
+            retryButton.setAttribute("aria-disabled", "false");
+            retryButton.textContent = "再読み込み";
+            errorStatus.textContent = `${kind}を読み込めませんでした。`;
+        };
+
         const syncState = () => {
             if (mediaReady.isMediaLoaded(media)) {
                 setState(wrapper, "loaded");
-                setRetryButton(wrapper, false, false);
+                wrapper.setAttribute("aria-busy", "false");
+                clearErrorUI();
                 return;
             }
-
             if (mediaReady.isMediaFailed(media)) {
                 setState(wrapper, "error");
-                setRetryButton(wrapper, true, false);
+                wrapper.setAttribute("aria-busy", "false");
+                showErrorUI();
                 return;
             }
-
             setState(wrapper, "loading");
-            setRetryButton(wrapper, false, false);
+            wrapper.setAttribute("aria-busy", "true");
         };
 
         if (ratio) {
@@ -118,7 +157,6 @@
         if (!media) {
             if (wrapper.hasAttribute("data-deferred-media")) {
                 setState(wrapper, "loading");
-                setRetryButton(wrapper, false, false);
             } else {
                 setState(wrapper, "loaded");
             }
@@ -135,23 +173,14 @@
             media.addEventListener(eventName, syncState);
         });
 
-        let onRetryClick = null;
-        if (retryButton) {
-            onRetryClick = () => {
-                retryMedia(media, wrapper);
-            };
-            retryButton.addEventListener("click", onRetryClick);
-        }
-
         wrapper.dataset.skeletonUiInitialized = "true";
         wrapper.__siteSkeletonMedia = media;
         wrapper.__siteSkeletonCleanup = () => {
             mediaEvents.forEach((eventName) => {
                 media.removeEventListener(eventName, syncState);
             });
-            if (retryButton && onRetryClick) {
-                retryButton.removeEventListener("click", onRetryClick);
-            }
+            clearErrorUI();
+            if (restoreTabIndex) restoreTabIndex();
         };
     }
 
