@@ -334,7 +334,7 @@
 .build-gallery-image,
 .build-crop-image,
 .build-guide-image {
-    background-image: url("https://images.snkisk.com/WebD_Minecraft_Site/images/8ac3a8a0-10c2-48f6-9ec7-31f2162b898b.png");
+    background-image: url("../assets/images/8ac3a8a0-10c2-48f6-9ec7-31f2162b898b.webp");
     background-size: cover;
     background-repeat: no-repeat;
     overflow: hidden;
@@ -522,7 +522,7 @@
     inset: 0;
     background:
         linear-gradient(180deg, rgba(2, 4, 6, 0.42), #020406),
-        url("https://images.snkisk.com/WebD_Minecraft_Site/images/8ac3a8a0-10c2-48f6-9ec7-31f2162b898b.png") center 58% / cover no-repeat;
+        url("../assets/images/8ac3a8a0-10c2-48f6-9ec7-31f2162b898b.webp") center 58% / cover no-repeat;
     filter: brightness(0.34) saturate(0.7);
     pointer-events: none;
 }

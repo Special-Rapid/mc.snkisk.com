@@ -1,0 +1,11 @@
+# Minecraft Fan Site
+
+Minecraftのサバイバル・PVP・建築を紹介するファンサイトです。
+
+- [概要](https://mc.snkisk.com/)
+- [サバイバル](https://mc.snkisk.com/survival)
+- [PVP](https://mc.snkisk.com/pvp)
+- [建築](https://mc.snkisk.com/build)
+- [ライセンス](https://mc.snkisk.com/licenses)
+
+公開説明の取得を助ける案内で、モデル学習への追加許諾を示すものではありません。
