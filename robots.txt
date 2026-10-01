@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mc.snkisk.com/sitemap.xml
