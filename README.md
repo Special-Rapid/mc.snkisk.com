@@ -36,6 +36,10 @@ https://mc.snkisk.com
 - テキストのフェードインアニメーション
 - モバイルレスポンシブ対応
 
+## 配信用画像
+
+HTMLの画像・遅延挿入画像・OGとCSS背景は`images.snkisk.com`の軽量WebPを参照します。配信コピーはrepoに置かず、[画像の由来と配信先](assets/images/README.md)にPNG原本・WebPの変換条件・SHA-256・確定CDN URLを記録しています。
+
 ## 対応デバイス
 
 - PC（1200px以上）
