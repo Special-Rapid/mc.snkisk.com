@@ -17,7 +17,13 @@
         if (!video.buffered || video.buffered.length === 0) {
             return 0;
         }
-        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+        // 最後のrangeの終端だけでは、途中が未取得でも100%になる。
+        let bufferedEnd = 0;
+        for (let index = 0; index < video.buffered.length; index += 1) {
+            if (video.buffered.start(index) > bufferedEnd + VIDEO_BUFFER_EPSILON)
+                break;
+            bufferedEnd = Math.max(bufferedEnd, video.buffered.end(index));
+        }
         return clampProgress(bufferedEnd / video.duration);
     }
     function isVideoFullyBuffered(video) {

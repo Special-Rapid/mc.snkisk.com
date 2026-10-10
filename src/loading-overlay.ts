@@ -82,11 +82,12 @@
         };
     }
 
-    const overlayController = createBarController()!;
+    const overlayController = createBarController() || {
+        setProgress(_progress: number) {},
+        getProgress() { return 1; },
+        hide: hideOverlayWithFallback,
+    };
 
-    if (!overlayController) {
-        return;
-    }
 
     let isHidden = false;
     let targetProgress = 0;

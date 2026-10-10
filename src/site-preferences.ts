@@ -223,16 +223,30 @@
         try { localStorage.setItem(key, value); } catch (_) { /* Private browsing can disable storage. */ }
     }
 
+    function systemTheme(): Theme {
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function systemLanguage(): Language {
+        const candidates = navigator.languages?.length ? navigator.languages : [navigator.language];
+        for (const candidate of candidates) {
+            if (typeof candidate !== "string") continue;
+            const normalized = candidate.toLowerCase();
+            if (normalized === "ja" || normalized === "en") return normalized;
+            const base = normalized.split("-")[0];
+            if (base === "ja" || base === "en") return base;
+        }
+        return "ja";
+    }
+
     function preferredTheme(): Theme {
         const saved = stored(storageKeys.theme);
-        if (supportedThemes.has(saved)) return saved as Theme;
-        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        return saved === "light" || saved === "dark" ? saved : systemTheme();
     }
 
     function preferredLanguage(): Language {
         const saved = stored(storageKeys.language);
-        if (supportedLanguages.has(saved)) return saved as Language;
-        return (navigator.language || "ja").toLowerCase().startsWith("ja") ? "ja" : "en";
+        return saved === "ja" || saved === "en" ? saved : systemLanguage();
     }
 
     let state: PreferencesState = {
@@ -245,43 +259,140 @@
     // Apply before the stylesheet is parsed so the selected device/manual theme never flashes.
     document.documentElement.dataset.colorScheme = state.theme;
     document.documentElement.lang = state.language;
+    document.documentElement.dir = "ltr";
+    document.documentElement.style.colorScheme = state.theme;
 
     function translateText(value: string): string;
     function translateText(value: unknown): unknown;
     function translateText(value: unknown): unknown {
         if (state.language !== "en" || typeof value !== "string") return value;
-        return textTranslations[value] || value;
+        return Object.prototype.hasOwnProperty.call(textTranslations, value) ? textTranslations[value] : value;
+    }
+
+    interface TextOverride {
+        groups: Text[][];
+        originals: Map<Text, string>;
+        breaks: Array<{ node: HTMLBRElement; style: string | null }>;
+    }
+    const originalText = new WeakMap<Text, string>();
+    const overrides = new WeakMap<Element, TextOverride>();
+    const overrideElements = new WeakSet<Element>();
+    const originalAttributes = new WeakMap<Element, Map<string, string | null>>();
+    let originalTitle: string | undefined;
+
+    function viewName(): string {
+        return document.documentElement.dataset.viewTheme ||
+            (document.body?.classList.contains("licenses-page") ? "licenses" :
+                document.body?.classList.contains("not-found-page") ? "notFound" : "");
+    }
+
+    function within(root: Node, selector: string): Element[] {
+        const elements: Element[] = [];
+        if (root instanceof Element && root.matches(selector)) elements.push(root);
+        if (root instanceof Element || root instanceof Document || root instanceof DocumentFragment) {
+            elements.push(...root.querySelectorAll(selector));
+        }
+        return elements;
+    }
+
+    function ignored(element: Element | null): boolean {
+        return !!element?.closest('script, style, textarea, input, [contenteditable]:not([contenteditable="false"]), [data-site-preferences], [aria-hidden="true"]');
+    }
+
+    function applyOverride(element: Element, translation: string): void {
+        let record = overrides.get(element);
+        if (!record) {
+            record = { groups: [[]], originals: new Map(), breaks: [] };
+            const collect = (parent: Node): void => {
+                for (const child of parent.childNodes) {
+                    if (child instanceof Text) {
+                        record!.groups[record!.groups.length - 1].push(child);
+                        record!.originals.set(child, child.data);
+                    } else if (child instanceof HTMLBRElement) {
+                        record!.breaks.push({ node: child, style: child.getAttribute("style") });
+                        record!.groups.push([]);
+                    } else if (child instanceof Element && !ignored(child)) collect(child);
+                }
+            };
+            collect(element);
+            overrides.set(element, record);
+            overrideElements.add(element);
+        }
+        const desired = new Map(record.originals);
+        const segments = translation.split(/<br\s*\/?>(?:\s*)/i);
+        if (state.language === "en" && segments.length <= record.groups.length) {
+            record.groups.forEach((group, index) => {
+                const first = group.find(text => record!.originals.get(text)?.trim()) || group[0];
+                for (const text of group) desired.set(text, text === first ? (segments[index] || "") : "");
+            });
+        }
+        // 同じ言語のtheme変更ではTextを触らず、利用者のSelectionを維持する。
+        for (const [text, value] of desired) if (text.data !== value) text.data = value;
+        record.breaks.forEach((br, index) => {
+            if (br.style === null) br.node.removeAttribute("style");
+            else if (br.node.getAttribute("style") !== br.style) br.node.setAttribute("style", br.style);
+            if (state.language === "en" && index >= segments.length - 1) br.node.style.display = "none";
+        });
     }
 
     function applyTextTranslations(root?: Node | null): void {
-        if (state.language !== "en") return;
-        const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_TEXT);
-        const textNodes: Text[] = [];
-        while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
-        textNodes.forEach((node) => {
-            const original = node.nodeValue!.trim().replace(/\s+/g, " ");
-            if (!original || !textTranslations[original]) return;
-            const leading = node.nodeValue!.match(/^\s*/)![0];
-            const trailing = node.nodeValue!.match(/\s*$/)![0];
-            node.nodeValue = `${leading}${textTranslations[original]}${trailing}`;
-        });
+        const scope = root || document.body;
+        if (!scope) return;
+        const view = viewName();
+        const translations = Object.prototype.hasOwnProperty.call(elementTranslations, view) ? elementTranslations[view] : undefined;
+        if (translations) {
+            for (const [selector, translation] of Object.entries(translations)) {
+                for (const element of within(scope, selector)) applyOverride(element, translation);
+            }
+        }
+        const localized = Object.prototype.hasOwnProperty.call(localizedConfigs, view) ? localizedConfigs[view] : undefined;
+        if (localized) {
+            for (const element of within(scope, "[data-header-nav] a[data-header-link-index]")) {
+                const index = Number(element.getAttribute("data-header-link-index"));
+                const translation = localized.links[index];
+                if (translation) applyOverride(element, translation);
+            }
+        }
+        const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            if (!(node instanceof Text) || ignored(node.parentElement)) continue;
+            let parent = node.parentElement;
+            let overridden = false;
+            while (parent) {
+                if (overrideElements.has(parent)) { overridden = true; break; }
+                parent = parent.parentElement;
+            }
+            if (overridden) continue;
+            const source = originalText.get(node) ?? node.data;
+            const normalized = source.trim().replace(/\s+/g, " ");
+            if (!Object.prototype.hasOwnProperty.call(textTranslations, normalized)) continue;
+            originalText.set(node, source);
+            const value = state.language === "en"
+                ? `${source.match(/^\s*/)![0]}${textTranslations[normalized]}${source.match(/\s*$/)![0]}`
+                : source;
+            if (node.data !== value) node.data = value;
+        }
+    }
 
-        const view = document.documentElement.dataset.viewTheme;
-        const translations = elementTranslations[view!];
-        if (!translations) return;
-        Object.entries(translations).forEach(([selector, translation]) => {
-            document.querySelectorAll<HTMLElement>(selector).forEach((element) => {
-                if (element.dataset.i18nTranslated === "true") return;
-                element.innerHTML = translation;
-                element.dataset.i18nTranslated = "true";
-            });
-        });
+    function originalAttribute(element: Element, attribute: string): string | null {
+        let attributes = originalAttributes.get(element);
+        if (!attributes) { attributes = new Map(); originalAttributes.set(element, attributes); }
+        if (!attributes.has(attribute)) attributes.set(attribute, element.getAttribute(attribute));
+        return attributes.get(attribute)!;
+    }
+
+    function applyAttribute(element: Element, attribute: string, translation: string | undefined): void {
+        const original = originalAttribute(element, attribute);
+        const value = state.language === "en" && translation !== undefined ? translation : original;
+        if (value === null) element.removeAttribute(attribute);
+        else element.setAttribute(attribute, value);
     }
 
     function localizeHeaderConfig<T extends HeaderConfig | null | undefined>(config: T): T {
         if (state.language !== "en" || !config || !Array.isArray(config.links)) return config;
-        const view = document.documentElement.dataset.viewTheme || (document.body.classList.contains("licenses-page") ? "licenses" : "");
-        const localized = localizedConfigs[view];
+        const view = viewName();
+        const localized = Object.prototype.hasOwnProperty.call(localizedConfigs, view) ? localizedConfigs[view] : undefined;
         if (!localized) return config;
         return {
             ...config,
@@ -291,6 +402,7 @@
 
     function updateMetadata() {
         document.documentElement.lang = state.language;
+        document.documentElement.dir = "ltr";
         const titles: Record<string, string> = {
             "": "Minecraft Fan Site",
             home: "Home - Minecraft Fan Site",
@@ -300,13 +412,30 @@
             licenses: "Licenses - Minecraft Fan Site",
             notFound: "404 - Page Not Found",
         };
-        const view = document.documentElement.dataset.viewTheme || (document.body.classList.contains("licenses-page") ? "licenses" : document.body.classList.contains("not-found-page") ? "notFound" : "");
-        if (state.language === "en" && titles[view]) document.title = titles[view];
+        const view = viewName();
+        if (originalTitle === undefined && document.readyState !== "loading") originalTitle = document.title;
+        if (originalTitle !== undefined) document.title = state.language === "en" && Object.prototype.hasOwnProperty.call(titles, view) ? titles[view] : originalTitle;
+        document.documentElement.style.colorScheme = state.theme;
+        const updateMeta = (name: string, content: string): void => {
+            let meta = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+            if (!meta) {
+                meta = document.createElement("meta");
+                meta.name = name;
+                document.head.appendChild(meta);
+            }
+            meta.content = content;
+        };
+        updateMeta("color-scheme", state.theme);
+        const background = document.body ? getComputedStyle(document.body).backgroundColor : "";
+        const opaque = background && background !== "transparent" && background !== "rgba(0, 0, 0, 0)";
+        updateMeta("theme-color", opaque ? background : state.theme === "dark" ? "#11161d" : "#ffffff");
     }
 
-    function updateLocalizedAttributes() {
-        if (state.language !== "en") return;
+    function updateLocalizedAttributes(root: Node = document) {
         const attributes: Record<string, string> = {
+            "桜に囲まれた畑と木造の家": "Farm and wooden house surrounded by cherry blossoms",
+            "夜のたき火と開いたチェストのそばに立つ防具姿のプレイヤー": "Armored player beside a campfire and open chest at night",
+            "作業台で木材と鉄インゴットから盾を作るレシピ": "Recipe for crafting a shield from wood and iron ingots at a crafting table",
             "サバイバルページ内メニュー": "Survival page navigation",
             "前のバイオームへ": "Previous biome",
             "次のバイオームへ": "Next biome",
@@ -337,10 +466,11 @@
             "近景で見る建築の街並みディテール": "Close view of building streetscape details",
             "巨大建築の構造を確認するためのガイドビジュアル": "Guide visual for checking a grand build's structure",
         };
-        document.querySelectorAll("[alt], [aria-label]").forEach((element) => {
+        within(root, "[alt], [aria-label]").forEach((element) => {
             ["alt", "aria-label"].forEach((attribute) => {
-                const source = element.getAttribute(attribute);
-                if (source && attributes[source]) element.setAttribute(attribute, attributes[source]);
+                if (ignored(element)) return;
+                const source = originalAttribute(element, attribute);
+                if (source && Object.prototype.hasOwnProperty.call(attributes, source)) applyAttribute(element, attribute, attributes[source]);
             });
         });
 
@@ -351,13 +481,20 @@
             build: "An immersive visual guide to Minecraft construction, scale, and worldbuilding through grand temples.",
         };
         const view = document.documentElement.dataset.viewTheme;
-        if (descriptions[view!]) {
-            document.querySelectorAll<HTMLMetaElement>('meta[name="description"], meta[property="og:description"]').forEach((meta) => meta.content = descriptions[view!]);
+        if (view && Object.prototype.hasOwnProperty.call(descriptions, view)) {
+            document.querySelectorAll<HTMLMetaElement>('meta[name="description"], meta[property="og:description"]').forEach((meta) => applyAttribute(meta, "content", descriptions[view]));
         }
     }
 
+    function setControlText(element: Element | null, value: string): void {
+        if (!element) return;
+        const text = Array.from(element.childNodes).find((node): node is Text => node instanceof Text);
+        if (text) { if (text.data !== value) text.data = value; }
+        else element.appendChild(document.createTextNode(value));
+    }
+
     function updateControls(root?: ParentNode | null): void {
-        (root || document).querySelectorAll("[data-site-preferences]").forEach((controls) => {
+        within((root || document) as Node, "[data-site-preferences]").forEach((controls) => {
             controls.setAttribute("aria-label", state.language === "en" ? "Display preferences" : "表示設定");
             const themeToggle = controls.querySelector("[data-theme-toggle]");
             const languageToggle = controls.querySelector("[data-language-toggle]");
@@ -375,21 +512,60 @@
                 languageToggle.setAttribute("aria-label", state.language === "en" ? "Switch to Japanese" : "Switch to English");
             }
             if (autoButton) {
+                const hadFocus = autoButton.contains(document.activeElement);
                 autoButton.hidden = state.themeSource === "auto" && state.languageSource === "auto";
                 autoButton.setAttribute("aria-label", state.language === "en" ? "Use device preferences" : "端末の設定に戻す");
+                if (hadFocus && autoButton.hidden && themeToggle instanceof HTMLElement) themeToggle.focus({ preventScroll: true });
             }
-            if (themeLabel) themeLabel.textContent = state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク");
-            if (languageLabel) languageLabel.textContent = state.language === "en" ? "JA" : "EN";
-            if (autoLabel) autoLabel.textContent = state.language === "en" ? "Auto" : "自動";
+            setControlText(themeLabel, state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク"));
+            setControlText(languageLabel, state.language === "en" ? "JA" : "EN");
+            setControlText(autoLabel, state.language === "en" ? "Auto" : "自動");
         });
     }
 
+    function preserveSelection(): () => void {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) return () => {};
+        const forward = selection.getRangeAt(0).startContainer === selection.anchorNode && selection.getRangeAt(0).startOffset === selection.anchorOffset;
+        const lengthOf = (node: Node) => node instanceof Text ? node.length : node.childNodes.length;
+        const anchor = { node: selection.anchorNode, offset: selection.anchorOffset, length: lengthOf(selection.anchorNode) };
+        const focus = { node: selection.focusNode, offset: selection.focusOffset, length: lengthOf(selection.focusNode) };
+        const normalize = (point: { node: Node; offset: number; length: number }): { node: Node; offset: number } => {
+            let node = point.node;
+            if (node instanceof Text && !node.data && node.parentElement) {
+                // group内で空になった装飾Textから、同じ要素の翻訳Textへ移す。
+                const walker = document.createTreeWalker(node.parentElement, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode()) {
+                    if (walker.currentNode instanceof Text && walker.currentNode.data) { node = walker.currentNode; break; }
+                }
+            }
+            const length = node instanceof Text ? node.length : node.childNodes.length;
+            const offset = Math.min(point.offset, length);
+            return { node, offset };
+        };
+        return () => {
+            if (!anchor.node.isConnected || !focus.node.isConnected) return;
+            const start = normalize(anchor); const end = normalize(focus);
+            if (start.node === end.node && start.offset === end.offset && lengthOf(start.node) > 0) {
+                const lower = Math.min(start.offset, lengthOf(start.node) - 1);
+                start.offset = forward ? lower : lower + 1;
+                end.offset = forward ? lower + 1 : lower;
+            }
+            selection.setBaseAndExtent(start.node, start.offset, end.node, end.offset);
+        };
+    }
+
     function apply() {
+        const restoreSelection = preserveSelection();
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
         document.documentElement.dataset.colorScheme = state.theme;
         updateMetadata();
         applyTextTranslations();
         updateLocalizedAttributes();
         updateControls();
+        restoreSelection();
+        if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
         document.dispatchEvent(new CustomEvent("sitepreferenceschange", { detail: { ...state } }));
     }
 
@@ -406,20 +582,21 @@
         state.language = language as Language;
         state.languageSource = "manual";
         save(storageKeys.language, language as Language);
-        window.location.reload();
+        apply();
     }
 
     document.addEventListener("click", (event) => {
-        const themeToggle = (event.target as Element).closest("[data-theme-toggle]");
+        if (!(event.target instanceof Element)) return;
+        const themeToggle = event.target.closest("[data-theme-toggle]");
         if (themeToggle) {
             setTheme(state.theme === "dark" ? "light" : "dark");
             return;
         }
-        if ((event.target as Element).closest("[data-language-toggle]")) {
+        if (event.target.closest("[data-language-toggle]")) {
             setLanguage(state.language === "ja" ? "en" : "ja");
             return;
         }
-        if ((event.target as Element).closest("[data-preferences-auto]")) window.SitePreferences.resetToAutomatic();
+        if (event.target.closest("[data-preferences-auto]")) window.SitePreferences.resetToAutomatic();
     });
 
     if (window.matchMedia) {
@@ -432,6 +609,12 @@
         if (typeof systemTheme.addEventListener === "function") systemTheme.addEventListener("change", updateAutomaticTheme);
         else if (typeof systemTheme.addListener === "function") systemTheme.addListener(updateAutomaticTheme);
     }
+
+    window.addEventListener("languagechange", () => {
+        if (state.languageSource !== "auto") return;
+        state.language = systemLanguage();
+        apply();
+    });
 
     document.addEventListener("DOMContentLoaded", () => {
         apply();
@@ -447,8 +630,8 @@
 
     document.addEventListener("sitepreferencescontentready", (event) => {
         applyTextTranslations(event.detail && event.detail.target);
-        updateLocalizedAttributes();
-        updateControls(event.detail && event.detail.target);
+        updateLocalizedAttributes(event.detail?.target || document);
+        updateControls(event.detail?.target);
     });
 
     window.SitePreferences = {
@@ -457,12 +640,11 @@
         localizeHeaderConfig,
         applyTextTranslations,
         resetToAutomatic: () => {
-            try {
-                localStorage.removeItem(storageKeys.theme);
-                localStorage.removeItem(storageKeys.language);
-            } catch (_) { /* Storage may be unavailable. */ }
-            state = { theme: preferredTheme(), language: preferredLanguage(), themeSource: "auto", languageSource: "auto" };
-            window.location.reload();
+            for (const key of Object.values(storageKeys)) {
+                try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
+            }
+            state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
+            apply();
         },
     };
 }());

@@ -32,6 +32,7 @@
         const retryButton = wrapper.querySelector(".skeleton-media__retry");
         wrapper.insertBefore(image, retryButton || null);
         wrapper.dataset.deferredMediaInserted = "true";
+        document.dispatchEvent(new CustomEvent("sitepreferencescontentready", { detail: { target: wrapper } }));
         if (window.SiteSkeletonUI && typeof window.SiteSkeletonUI.initWrapper === "function") {
             window.SiteSkeletonUI.initWrapper(wrapper, { force: true });
         }
