@@ -2,9 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
-
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-
 async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storageThrows = false, removeThrows = false, dark = false } = {}) {
     const errors = [];
     const virtualConsole = new VirtualConsole();
@@ -19,10 +17,13 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
     Object.defineProperty(window.navigator, 'languages', { configurable: true, value: languages });
     Object.defineProperty(window.navigator, 'language', { configurable: true, value: languages[0] || '' });
     Object.defineProperty(window, 'localStorage', { value: {
-        getItem(key) { if (storageThrows) throw new Error('storage unavailable'); return store.get(key) ?? null; },
-        setItem(key, value) { if (storageThrows) throw new Error('storage unavailable'); store.set(key, value); },
-        removeItem(key) { removals.push(key); if (storageThrows || removeThrows) throw new Error('storage unavailable'); store.delete(key); },
-    } });
+            getItem(key) { if (storageThrows)
+                throw new Error('storage unavailable'); return store.get(key) ?? null; },
+            setItem(key, value) { if (storageThrows)
+                throw new Error('storage unavailable'); store.set(key, value); },
+            removeItem(key) { removals.push(key); if (storageThrows || removeThrows)
+                throw new Error('storage unavailable'); store.delete(key); },
+        } });
     window.matchMedia = () => ({ matches: dark, addEventListener(_event, listener) { themeListener = listener; } });
     const document = window.document;
     const originalTitle = document.title;
@@ -36,7 +37,8 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
     const originalAlt = alt?.getAttribute('alt');
     window.eval(read('js/safe-dom.js'));
     window.eval(read('js/site-preferences.js'));
-    if (document.readyState === 'loading') await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    if (document.readyState === 'loading')
+        await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
     window.eval(read('js/header-include.js'));
     window.eval(read('js/cta-include.js'));
     function loadComponents() {
@@ -64,13 +66,11 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
         },
     };
 }
-
 const languageKey = 'minecraft-fan-site-language';
 const themeKey = 'minecraft-fan-site-theme';
 const toggleLanguage = ({ document }) => document.querySelector('[data-language-toggle]').click();
 const state = ({ window }) => ({ ...window.SitePreferences.getState() });
 const assertNoReload = ({ errors }) => assert.deepEqual(errors, [], '再読み込み・navigation・未実装DOM処理を呼ばない');
-
 test('初回ENの遅延header/CTAが日本語へ戻り、同じリンク/Textノードを保持する', async () => {
     const ctx = await start({ saved: { [languageKey]: 'en' } });
     try {
@@ -93,9 +93,11 @@ test('初回ENの遅延header/CTAが日本語へ戻り、同じリンク/Textノ
         assert.equal(nav.textContent, 'Gallery');
         assert.equal(title.textContent, 'Now build your own landscape');
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('本文JA→EN→JAで改行・装飾span・属性を復元し、Text/Elementを作り直さない', async () => {
     const ctx = await start();
     try {
@@ -117,9 +119,11 @@ test('本文JA→EN→JAで改行・装飾span・属性を復元し、Text/Eleme
         assert.equal(ctx.document.documentElement.lang, 'ja');
         assert.equal(ctx.document.activeElement, button);
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('title/descriptionはホーム原文へ戻し、入力値とmediaノードを保持する', async () => {
     const ctx = await start({ page: 'home' });
     try {
@@ -137,20 +141,26 @@ test('title/descriptionはホーム原文へ戻し、入力値とmediaノード�
         assert.equal(ctx.document.querySelector('meta[name="description"]').content, ctx.originalDescription);
         assert.equal(input.value, '公式サイトで始める');
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 for (const [languages, expected] of [
     [['en'], 'en'], [['en-US'], 'en'], [['ja-JP'], 'ja'], [['fr-FR'], 'ja'],
     [['fr-FR', 'en-GB'], 'en'], [['ja-JP', 'en'], 'ja'], [[], 'ja'],
 ]) {
     test(`端末言語 ${JSON.stringify(languages)} は ${expected} にfallbackする`, async () => {
         const ctx = await start({ languages, saved: { [languageKey]: 'unsupported' } });
-        try { assert.equal(state(ctx).language, expected); assert.equal(state(ctx).languageSource, 'auto'); }
-        finally { ctx.dom.window.close(); }
+        try {
+            assert.equal(state(ctx).language, expected);
+            assert.equal(state(ctx).languageSource, 'auto');
+        }
+        finally {
+            ctx.dom.window.close();
+        }
     });
 }
-
 test('storage全操作が例外でも言語・テーマを反映し、自動設定へ戻せる', async () => {
     const ctx = await start({ storageThrows: true });
     try {
@@ -169,9 +179,11 @@ test('storage全操作が例外でも言語・テーマを反映し、自動設�
         assert.equal(ctx.document.activeElement, ctx.document.querySelector('[data-theme-toggle]'));
         assert.deepEqual(ctx.removals, [themeKey, languageKey]);
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('削除失敗で保存済み手動値を再採用せずSystemへ戻す', async () => {
     const ctx = await start({ saved: { [languageKey]: 'en', [themeKey]: 'dark' }, removeThrows: true });
     try {
@@ -183,9 +195,11 @@ test('削除失敗で保存済み手動値を再採用せずSystemへ戻す', as
         assert.equal(ctx.store.get(languageKey), 'en', '削除失敗を実際に再現');
         assert.deepEqual(ctx.removals, [themeKey, languageKey]);
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('Systemは端末変更に追従し、手動選択中は追従せずmetadataを同期する', async () => {
     const ctx = await start();
     try {
@@ -205,9 +219,11 @@ test('Systemは端末変更に追従し、手動選択中は追従せずmetadata
         assert.equal(state(ctx).theme, 'light');
         assert.equal(ctx.document.querySelector('meta[name="color-scheme"]').content, 'light');
         assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 for (const page of ['home', 'survival', 'pvp', 'build', 'licenses', '404']) {
     test(`${page}画面は既存本文のTextノードを維持してJA→EN→JAを往復する`, async () => {
         const ctx = await start({ page });
@@ -217,7 +233,8 @@ for (const page of ['home', 'survival', 'pvp', 'build', 'licenses', '404']) {
             const originals = new Map();
             while (walker.nextNode()) {
                 const text = walker.currentNode;
-                if (!text.parentElement?.closest('[data-site-preferences]')) originals.set(text, text.data);
+                if (!text.parentElement?.closest('[data-site-preferences]'))
+                    originals.set(text, text.data);
             }
             toggleLanguage(ctx);
             assert.equal(ctx.document.documentElement.lang, 'en');
@@ -228,28 +245,39 @@ for (const page of ['home', 'survival', 'pvp', 'build', 'licenses', '404']) {
                 assert.equal(node.data, original, '空白を含む原文を復元');
             }
             assertNoReload(ctx);
-        } finally { ctx.dom.window.close(); }
+        }
+        finally {
+            ctx.dom.window.close();
+        }
     });
 }
-
 for (const language of ['ja', 'en']) {
     test(`${language}の選択範囲をtheme切替と同じ言語の再適用で維持する`, async () => {
         const ctx = await start({ saved: { [languageKey]: language } });
         try {
             ctx.loadComponents();
-            const text = [...ctx.hero.childNodes].find(node => node.nodeType === 3 && node.data.trim().length > 4);
-            const selection = ctx.window.getSelection(); const range = ctx.document.createRange();
-            range.setStart(text, 1); range.setEnd(text, 4); selection.removeAllRanges(); selection.addRange(range);
+            const text = [...ctx.hero.childNodes].find((node) => node.nodeType === 3 && node.data.trim().length > 4);
+            const selection = ctx.window.getSelection();
+            const range = ctx.document.createRange();
+            range.setStart(text, 1);
+            range.setEnd(text, 4);
+            selection.removeAllRanges();
+            selection.addRange(range);
             const selectedText = selection.toString();
             ctx.document.querySelector('[data-theme-toggle]').click();
             ctx.window.SitePreferences.applyTextTranslations();
-            assert.equal(selection.anchorNode, text); assert.equal(selection.anchorOffset, 1);
-            assert.equal(selection.focusNode, text); assert.equal(selection.focusOffset, 4); assert.equal(selection.toString(), selectedText);
+            assert.equal(selection.anchorNode, text);
+            assert.equal(selection.anchorOffset, 1);
+            assert.equal(selection.focusNode, text);
+            assert.equal(selection.focusOffset, 4);
+            assert.equal(selection.toString(), selectedText);
             assertNoReload(ctx);
-        } finally { ctx.dom.window.close(); }
+        }
+        finally {
+            ctx.dom.window.close();
+        }
     });
 }
-
 test('言語往復で本文の前向き・後ろ向きSelectionの端点と非空範囲を維持する', async () => {
     const ctx = await start();
     try {
@@ -259,76 +287,122 @@ test('言語往復で本文の前向き・後ろ向きSelectionの端点と非�
         for (const [anchor, focus] of [[1, 4], [4, 1]]) {
             selection.setBaseAndExtent(text, anchor, text, focus);
             toggleLanguage(ctx);
-            assert.equal(selection.anchorNode, text); assert.equal(selection.anchorOffset, anchor);
-            assert.equal(selection.focusNode, text); assert.equal(selection.focusOffset, focus); assert.notEqual(selection.toString(), '');
-            toggleLanguage(ctx); assert.equal(selection.anchorOffset, anchor); assert.equal(selection.focusOffset, focus); assert.notEqual(selection.toString(), '');
+            assert.equal(selection.anchorNode, text);
+            assert.equal(selection.anchorOffset, anchor);
+            assert.equal(selection.focusNode, text);
+            assert.equal(selection.focusOffset, focus);
+            assert.notEqual(selection.toString(), '');
+            toggleLanguage(ctx);
+            assert.equal(selection.anchorOffset, anchor);
+            assert.equal(selection.focusOffset, focus);
+            assert.notEqual(selection.toString(), '');
         }
-        assert.equal(ctx.document.documentElement.dir, 'ltr'); assertNoReload(ctx);
-    } finally { ctx.dom.window.close(); }
+        assert.equal(ctx.document.documentElement.dir, 'ltr');
+        assertNoReload(ctx);
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
 test('現在のSurvival/PVP画像ラベルも英語と原文を往復する', async () => {
     for (const page of ['survival', 'pvp']) {
         const ctx = await start({ page });
         try {
-            ctx.loadComponents(); const images = [...ctx.document.querySelectorAll('img[alt]')]; const originals = images.map(image => image.alt);
+            ctx.loadComponents();
+            const images = [...ctx.document.querySelectorAll('img[alt]')];
+            const originals = images.map(image => image.alt);
             toggleLanguage(ctx);
-            for (const image of images) assert.equal(/[\u3040-\u30ff\u3400-\u9fff]/u.test(image.alt), false, image.alt);
-            toggleLanguage(ctx); assert.deepEqual(images.map(image => image.alt), originals);
-        } finally { ctx.dom.window.close(); }
+            for (const image of images)
+                assert.equal(/[\u3040-\u30ff\u3400-\u9fff]/u.test(image.alt), false, image.alt);
+            toggleLanguage(ctx);
+            assert.deepEqual(images.map(image => image.alt), originals);
+        }
+        finally {
+            ctx.dom.window.close();
+        }
     }
 });
 test('EN選択後に遅延挿入されるメディアもcontentreadyで翻訳する', async () => {
     const ctx = await start({ page: 'home', saved: { [languageKey]: 'en' } });
     try {
-        ctx.loadComponents(); const wrapper = ctx.document.createElement('div');
-        wrapper.dataset.deferredMedia = ''; wrapper.dataset.mediaSrc = '/image.webp'; wrapper.dataset.mediaAlt = '畑と家畜が揃ったサバイバル農場';
-        ctx.document.body.appendChild(wrapper); ctx.window.SiteSkeletonUI = { initWrapper() {} };
-        ctx.window.eval(read('js/deferred-media.js')); ctx.window.SiteDeferredMedia.ensureDeferredMedia(wrapper);
-        const image = wrapper.querySelector('img'); assert.equal(image.alt, 'Survival farm with crops and livestock');
-        toggleLanguage(ctx); assert.equal(wrapper.querySelector('img'), image); assert.equal(image.alt, wrapper.dataset.mediaAlt);
-    } finally { ctx.dom.window.close(); }
+        ctx.loadComponents();
+        const wrapper = ctx.document.createElement('div');
+        wrapper.dataset.deferredMedia = '';
+        wrapper.dataset.mediaSrc = '/image.webp';
+        wrapper.dataset.mediaAlt = '畑と家畜が揃ったサバイバル農場';
+        ctx.document.body.appendChild(wrapper);
+        ctx.window.SiteSkeletonUI = { initWrapper() { } };
+        ctx.window.eval(read('js/deferred-media.js'));
+        ctx.window.SiteDeferredMedia.ensureDeferredMedia(wrapper);
+        const image = wrapper.querySelector('img');
+        assert.equal(image.alt, 'Survival farm with crops and livestock');
+        toggleLanguage(ctx);
+        assert.equal(wrapper.querySelector('img'), image);
+        assert.equal(image.alt, wrapper.dataset.mediaAlt);
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('短い翻訳へ戻す末尾Selectionも非空で方向を維持する', async () => {
     const ctx = await start({ saved: { [languageKey]: 'en' } });
     try {
-        ctx.loadComponents(); const text = [...ctx.document.querySelector('.build-story h2').childNodes].find(node => node.nodeType === 3 && node.data.trim());
+        ctx.loadComponents();
+        const text = [...ctx.document.querySelector('.build-story h2').childNodes].find(node => node.nodeType === 3 && node.data.trim());
         const selection = ctx.window.getSelection();
         for (const backwards of [false, true]) {
-            if (ctx.document.documentElement.lang !== 'en') toggleLanguage(ctx);
-            const start = text.length - 10; const end = text.length - 2;
+            if (ctx.document.documentElement.lang !== 'en')
+                toggleLanguage(ctx);
+            const start = text.length - 10;
+            const end = text.length - 2;
             selection.setBaseAndExtent(text, backwards ? end : start, text, backwards ? start : end);
             toggleLanguage(ctx);
-            assert.equal(selection.isCollapsed, false); assert.notEqual(selection.toString(), '');
-            assert.equal(selection.anchorNode, text); assert.equal(selection.focusNode, text);
+            assert.equal(selection.isCollapsed, false);
+            assert.notEqual(selection.toString(), '');
+            assert.equal(selection.anchorNode, text);
+            assert.equal(selection.focusNode, text);
             assert.equal(selection.anchorOffset > selection.focusOffset, backwards);
-            assert.ok(selection.anchorOffset <= text.length); assert.ok(selection.focusOffset <= text.length);
+            assert.ok(selection.anchorOffset <= text.length);
+            assert.ok(selection.focusOffset <= text.length);
         }
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });
-
 test('翻訳の長さ境界をまたぐSelectionも方向と到達可能な範囲を維持する', async () => {
     const ctx = await start({ saved: { [languageKey]: 'en' } });
     try {
         ctx.loadComponents();
         const text = [...ctx.document.querySelector('.build-story h2').childNodes].find(node => node.nodeType === 3 && node.data.trim());
-        toggleLanguage(ctx); const shortLength = text.length; toggleLanguage(ctx);
+        toggleLanguage(ctx);
+        const shortLength = text.length;
+        toggleLanguage(ctx);
         const selection = ctx.window.getSelection();
         const intervals = [[shortLength - 1, shortLength + 1], [shortLength, shortLength + 1], [text.length - 1, text.length], [0, text.length]];
         for (const [start, end] of intervals) {
             for (const backwards of [false, true]) {
-                if (ctx.document.documentElement.lang !== 'en') toggleLanguage(ctx);
+                if (ctx.document.documentElement.lang !== 'en')
+                    toggleLanguage(ctx);
                 selection.setBaseAndExtent(text, backwards ? end : start, text, backwards ? start : end);
                 toggleLanguage(ctx);
-                assert.equal(selection.anchorNode, text); assert.equal(selection.focusNode, text);
-                assert.equal(selection.isCollapsed, false); assert.notEqual(selection.toString(), '');
+                assert.equal(selection.anchorNode, text);
+                assert.equal(selection.focusNode, text);
+                assert.equal(selection.isCollapsed, false);
+                assert.notEqual(selection.toString(), '');
                 assert.equal(selection.anchorOffset > selection.focusOffset, backwards);
                 const low = Math.min(selection.anchorOffset, selection.focusOffset);
                 const high = Math.max(selection.anchorOffset, selection.focusOffset);
                 assert.ok(low >= 0 && high <= text.length);
                 assert.ok(high - low <= end - start);
-                if (start === 0) { assert.equal(low, 0); assert.equal(high, text.length); }
+                if (start === 0) {
+                    assert.equal(low, 0);
+                    assert.equal(high, text.length);
+                }
             }
         }
-    } finally { ctx.dom.window.close(); }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
 });

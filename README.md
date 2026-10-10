@@ -130,6 +130,10 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 ## 読み込み・復旧・表示設定の内部契約
 
+Node回帰テスト3本は `tests/src/*.test.mts` を正本に、`tsconfig.node-tests.json` のstrict NodeNext設定で既存の `tests/*.test.mjs` へ生成します。ES2022を使ってテスト内のclass fieldを保持し、DOM・VM・timerのfixture境界を具体的な型で表します。`npm run check` が型検査・再生成・既存47テストを実行し、CIで生成物の差分を検査します。
+
+この単位は [Issue #16](https://github.com/Special-Rapid/mc.snkisk.com/issues/16) です。Node補助2本の型移行は別の [PR #13](https://github.com/Special-Rapid/mc.snkisk.com/pull/13)・[PR #15](https://github.com/Special-Rapid/mc.snkisk.com/pull/15) で扱い、各Draftの納品を本番全体の移行完了とは扱いません。
+
 componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
 
 動画の完了は先頭から連続したbufferとreadyStateで判定します。URLはブラウザと同じ正規化後のprotocolで検証し、JSON設定は既知の文字列フィールドだけ採用します。
