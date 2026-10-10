@@ -49,7 +49,8 @@ HTMLの画像・遅延挿入画像・OGとCSS背景は`images.snkisk.com`の軽�
 
 - HTML
 - CSS
-- JavaScript
+- TypeScript（自作コードの正本は `src/`）
+- JavaScript（ブラウザ配信用の生成物とvendor）
 
 ## ファイル構成
 
@@ -107,3 +108,21 @@ https://mc.snkisk.com (以下このウェブサイト) は、ファンが独自�
 このウェブサイトのオリジナルコンテンツは、CC0 1.0 Universal (パブリックドメイン)ライセンスの下で公開されています。
 
 すべてのライセンス情報を表示するには、[こちら](https://mc.snkisk.com/licenses.html)をご覧ください。
+
+## 開発と型検査
+
+自作スクリプト17本の正本は `src/*.ts` です。classic scriptの公開グローバル、HTMLの読み込み順と `js/*.js` のURLを保持するため、バンドラーやframeworkへの置換は行いません。`src/site-types.d.ts` にDOM・設定・読み込み状態・共有APIの契約を置きます。
+
+```sh
+npm ci
+npm run check
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+`npm run typecheck` はstrict型検査とコンパイル専用の境界テスト、`npm run build` は `src/` から `js/` への生成、`npm test` は画像・動画・URL・リンクの境界検証を実施します。HTMLは生成JSを直接読むため、生成物をコミットし、ソースと一致させます。CIも再生成の差分を検査します。
+
+移行は `allowJs` / `checkJs` の入口、メディア判定とリンクの純粋処理、読み込み・コンポーネント境界、ページUI・表示設定の順で進めました。17本の型消去後の実行構文を `npm run compare:runtime` で基準main `f6fc2ab` と比較できます。この比較は挙動変更を分離した型移行PR専用です。
+
+`js/vendor/` は第三者の配布物としてTS移行の対象外です。HTML/CSS、Nodeの検証スクリプト、設定とメディアのmanifestもそれぞれの形式を維持します。コンパイル専用 `*.type-test.ts` はJavaScript生成の対象外です。依存は開発用のTypeScriptと既存vendor用の型宣言のみで、利用者へ新しいライブラリを配信しません。
+
+[型移行Issue #8](https://github.com/Special-Rapid/mc.snkisk.com/issues/8) と、挙動を変える内部改善は別のPRでレビューします。
