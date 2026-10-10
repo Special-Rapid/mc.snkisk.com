@@ -111,7 +111,7 @@ https://mc.snkisk.com (以下このウェブサイト) は、ファンが独自�
 
 ## 開発と型検査
 
-既存17本と追加3本、計20本の自作スクリプトの正本は `src/*.ts` です。classic scriptの公開グローバル、HTMLの読み込み順と `js/*.js` のURLを保持するため、バンドラーやframeworkへの置換は行いません。`src/site-types.d.ts` にDOM・設定・読み込み状態・共有APIの契約を置きます。
+自作スクリプト20本の正本は `src/*.ts` です（移行対象の既存17本と、内部改善で追加した3本）。classic scriptの公開グローバル、HTMLの読み込み順と `js/*.js` のURLを保持するため、バンドラーやframeworkへの置換は行いません。`src/site-types.d.ts` にDOM・設定・読み込み状態・共有APIの契約を置きます。
 
 ```sh
 npm ci
@@ -123,12 +123,17 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 移行は `allowJs` / `checkJs` の入口、メディア判定とリンクの純粋処理、読み込み・コンポーネント境界、ページUI・表示設定の順で進めました。17本の型消去後の実行構文を `npm run compare:runtime` で基準main `f6fc2ab` と比較できます。この比較は挙動変更を分離した型移行PR専用です。
 
-`js/vendor/` は第三者の配布物としてTS移行の対象外です。HTML/CSS、Nodeの検証スクリプト、設定とメディアのmanifestもそれぞれの形式を維持します。コンパイル専用 `*.type-test.ts` はJavaScript生成の対象外です。開発依存はTypeScript、既存vendor用の型宣言、境界テスト用のjsdomで、利用者へ新しいライブラリを配信しません。
+`js/vendor/` は第三者の配布物としてTS移行の対象外です。HTML/CSS、Nodeの検証スクリプト、設定とメディアのmanifestもそれぞれの形式を維持します。コンパイル専用 `*.type-test.ts` はJavaScriptへ出力しません。依存は開発用のTypeScript・既存vendor用の型宣言・DOMテスト用jsdomで、利用者へ新しいライブラリを配信しません。
 
 [型移行Issue #8](https://github.com/Special-Rapid/mc.snkisk.com/issues/8) と、挙動を変える内部改善は別のPRでレビューします。
 
-## 読み込みと復旧の境界
 
-共通部品fetchは15秒、画像・動画と再試行は40秒を期限とし、成功・失敗・時間切れを区別します。lazy画像は可視近傍へ入ってから期限を開始します。取得できない既知componentはbuild時に原本から生成したfallbackで復旧し、未知のpathは取得しません。URLはブラウザの正規化で検証し、JSON設定は既知のstring項目を採用します。
+## 読み込み・復旧・表示設定の内部契約
 
-メディアの失敗・再試行文言はJA/ENのresourceへ集約します。追加依存のjsdomはローカル境界テスト専用です。表示設定のreload撤去・原文復元は後続commitで扱います。
+componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
+
+動画の完了は先頭から連続したbufferとreadyStateで判定します。URLはブラウザと同じ正規化後のprotocolで検証し、JSON設定は既知の文字列フィールドだけ採用します。
+
+言語・テーマ・自動設定への復帰はページを再読み込みせず、原文、既存DOMノード、入力値、スクロールとフォーカスを保持します。端末言語は対応するexact/base localeを優先し、未対応なら日本語です。自動設定中だけ端末の変更を反映し、storage例外でも現在の画面に設定を適用します。
+
+`npm run check` はstrict型検査、生成、読み込み失敗・期限・復旧・URL・進捗・実DOMでの全6画面の言語往復を検査します。layout・メディア再生・keyboard導線はブラウザで別途検証します。型移行だけの `compare:runtime` は、この挙動改善branchの同一性検査には使いません。[内部改善Issue #9](https://github.com/Special-Rapid/mc.snkisk.com/issues/9) で型移行と分けてレビューします。

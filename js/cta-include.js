@@ -30,33 +30,30 @@ function renderCtaContent(ctaTarget) {
         return;
     try {
         const config = parseSiteCtaConfig(raw);
-        const translate = window.SitePreferences && typeof window.SitePreferences.translateText === "function"
-            ? window.SitePreferences.translateText
-            : (value) => value;
         if (kicker) {
             if (config.kicker) {
                 kicker.style.display = "";
-                setSafeText(kicker, translate(config.kicker));
+                setSafeText(kicker, config.kicker);
             }
             else {
                 kicker.style.display = "none";
             }
         }
         if (title && config.title)
-            setSafeText(title, translate(config.title));
+            setSafeText(title, config.title);
         if (body && config.body)
-            setSafeText(body, translate(config.body));
+            setSafeText(body, config.body);
         if (sub) {
             if (config.sub) {
                 sub.style.display = "";
-                setSafeText(sub, translate(config.sub));
+                setSafeText(sub, config.sub);
             }
             else {
                 sub.style.display = "none";
             }
         }
-        applySafeLink(primary, config.primary && { ...config.primary, text: translate(config.primary.text) });
-        applySafeLink(secondary, config.secondary && { ...config.secondary, text: translate(config.secondary.text) });
+        applySafeLink(primary, config.primary);
+        applySafeLink(secondary, config.secondary);
     }
     catch (error) {
         console.error("Invalid data-cta-config:", error);

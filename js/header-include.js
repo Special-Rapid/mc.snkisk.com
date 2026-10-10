@@ -5,7 +5,7 @@ function buildHeaderNav(nav, links) {
         return;
     }
     const fragment = document.createDocumentFragment();
-    links.forEach((item) => {
+    links.forEach((item, index) => {
         if (!item || typeof item !== "object") {
             return;
         }
@@ -20,6 +20,7 @@ function buildHeaderNav(nav, links) {
         if (item.ariaLabel) {
             a.setAttribute("aria-label", String(item.ariaLabel));
         }
+        a.dataset.headerLinkIndex = String(index);
         li.appendChild(a);
         fragment.appendChild(li);
     });
@@ -42,10 +43,7 @@ function renderHeaderContent(headerTarget) {
         return;
     }
     try {
-        let config = parseSiteHeaderConfig(raw);
-        if (window.SitePreferences && typeof window.SitePreferences.localizeHeaderConfig === "function") {
-            config = window.SitePreferences.localizeHeaderConfig(config);
-        }
+        const config = parseSiteHeaderConfig(raw);
         if (config.headerClass) {
             header.className = String(config.headerClass);
         }
