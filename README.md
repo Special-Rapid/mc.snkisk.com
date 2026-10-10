@@ -130,6 +130,10 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 ## 読み込み・復旧・表示設定の内部契約
 
+Node用fallback生成処理の正本は `scripts/src/build-component-fallbacks.mts` です。`tsconfig.node-tools.json` でstrict検査し、`npm run build` が既存の `scripts/build-component-fallbacks.mjs` へ生成してから実行します。生成MJSもコミットし、CIで再生成の差分を検査します。ブラウザ用20本のTSとは別のNode ESM設定を使い、呼出先とcomponent出力を保持します。
+
+Node用コードの移行は [Issue #12](https://github.com/Special-Rapid/mc.snkisk.com/issues/12) のこの1本から進めます。`scripts/compare-runtime.mjs` と `tests/*.test.mjs` 3本は手書きMJSのままで、Node全体の移行完了には含めません。
+
 componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
 
 動画の完了は先頭から連続したbufferとreadyStateで判定します。URLはブラウザと同じ正規化後のprotocolで検証し、JSON設定は既知の文字列フィールドだけ採用します。
