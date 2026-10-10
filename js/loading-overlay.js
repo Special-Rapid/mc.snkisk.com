@@ -5,15 +5,11 @@
     const overlay = document.querySelector("[data-loading-overlay]");
     const completeEvent = window.__siteInitialLoadEventName || "site:initial-load-complete";
     const tracker = window.__siteInitialLoadTracker;
-    const prefersReducedMotion = Boolean(
-        window.matchMedia &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-
+    const prefersReducedMotion = Boolean(window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     if (!overlay) {
         return;
     }
-
     function hideOverlayWithFallback(onHide) {
         if (prefersReducedMotion) {
             overlay.style.display = "none";
@@ -22,25 +18,20 @@
             }
             return;
         }
-
         if (window.jQuery) {
             window.jQuery(overlay).delay(80).fadeOut(650, onHide);
             return;
         }
-
         overlay.style.display = "none";
         if (typeof onHide === "function") {
             onHide();
         }
     }
-
     function createBarController() {
         const loadingProgress = overlay.querySelector("[data-loading-progress]");
-
         if (!loadingProgress || !window.ProgressBar) {
             return null;
         }
-
         const bar = new ProgressBar.Line(loadingProgress, {
             strokeWidth: 0.2,
             easing: "easeInOut",
@@ -66,9 +57,7 @@
                 progressBar.setText(Math.round(progressBar.value() * 100) + " %");
             },
         });
-
         bar.set(0);
-
         return {
             setProgress(progress) {
                 bar.set(progress);
@@ -81,54 +70,40 @@
             },
         };
     }
-
     const overlayController = createBarController();
-
     if (!overlayController) {
         return;
     }
-
     let isHidden = false;
     let targetProgress = 0;
     let visibleProgress = 0;
     let animationFrameId = 0;
     let shouldHideWhenSettled = false;
-
     function clampProgress(progress) {
         return Math.min(Math.max(progress, 0), 1);
     }
-
     function setProgress(progress) {
         targetProgress = Math.max(targetProgress, clampProgress(progress));
-
         if (prefersReducedMotion) {
             visibleProgress = targetProgress;
             overlayController.setProgress(visibleProgress);
-
             if (shouldHideWhenSettled && visibleProgress >= COMPLETE_HIDE_THRESHOLD) {
                 overlayController.hide();
             }
             return;
         }
-
         startAnimationLoop();
     }
-
     function tick() {
         animationFrameId = 0;
-
         const delta = targetProgress - visibleProgress;
         if (delta > MIN_VISIBLE_DELTA) {
-            visibleProgress = Math.min(
-                targetProgress,
-                visibleProgress + delta * SMOOTHING_FACTOR
-            );
-        } else {
+            visibleProgress = Math.min(targetProgress, visibleProgress + delta * SMOOTHING_FACTOR);
+        }
+        else {
             visibleProgress = targetProgress;
         }
-
         overlayController.setProgress(visibleProgress);
-
         if (shouldHideWhenSettled && visibleProgress >= COMPLETE_HIDE_THRESHOLD) {
             visibleProgress = 1;
             targetProgress = 1;
@@ -136,27 +111,21 @@
             overlayController.hide();
             return;
         }
-
         if (targetProgress - visibleProgress > 0) {
             startAnimationLoop();
         }
     }
-
     function startAnimationLoop() {
         if (animationFrameId) {
             return;
         }
-
         animationFrameId = window.requestAnimationFrame(tick);
     }
-
     function hideOverlay() {
         if (isHidden) {
             return;
         }
-
         isHidden = true;
-
         if (prefersReducedMotion) {
             visibleProgress = 1;
             targetProgress = 1;
@@ -164,25 +133,22 @@
             overlayController.hide();
             return;
         }
-
         shouldHideWhenSettled = true;
         setProgress(1);
     }
-
     if (tracker) {
         tracker.subscribe((state) => {
             setProgress(state.progress);
-
             if (state.isComplete) {
                 hideOverlay();
             }
         });
     }
-
     if (window.__siteInitialLoadComplete) {
         setProgress(1);
         hideOverlay();
-    } else {
+    }
+    else {
         window.addEventListener(completeEvent, function () {
             setProgress(1);
             hideOverlay();

@@ -1,13 +1,11 @@
 (function () {
     "use strict";
-
     const storageKeys = {
         theme: "minecraft-fan-site-theme",
         language: "minecraft-fan-site-language",
     };
     const supportedThemes = new Set(["light", "dark"]);
     const supportedLanguages = new Set(["ja", "en"]);
-
     const textTranslations = {
         "再読み込み": "Reload",
         "© 2026 新快速(Special-Rapid)": "© 2026 Special-Rapid",
@@ -58,7 +56,6 @@
         "横移動で間合い維持": "Hold spacing by strafing",
         "半分前に一度引く": "Reset before half health",
     };
-
     const localizedConfigs = {
         home: {
             links: ["survival", "pvp", "build"],
@@ -76,7 +73,6 @@
             links: ["Third-party libraries", "MIT license", "Original content", "Source code"],
         },
     };
-
     Object.assign(textTranslations, {
         "最初の10分でやること": "What to do in the first 10 minutes", "原木、作業台、石ツール。夜までに必要な土台を最短で揃える流れです。": "Gather logs, make a crafting table, and upgrade to stone tools—the shortest route to a safe first night.", "初日ルートを見る": "View the first-day route",
         "最初の夜を越える": "Survive the first night", "食料、ベッド、安全な足場を先に確保し、夜の事故を減らす順番を整理します。": "Secure food, a bed, and safe footing first to reduce night-time mistakes.", "序盤の注目カードへ": "See early-game cards",
@@ -169,7 +165,6 @@
         "今すぐ戦場へ": "Enter the arena now", "知識は武器ですが、最初は初撃・距離・回復の3点だけでも勝ち筋は見えやすくなります。あとは実戦で一つずつ精度を上げていきましょう。": "Knowledge is a weapon, but first hits, spacing, and recovery alone already make winning routes easier to see. Improve one piece at a time in real matches.", "まだ装備が揃ってない？サバイバルガイドで基礎を固めてから戻ってこよう。": "Need more gear first? Build the basics in the Survival guide and come back.", "サバイバルガイドを見る": "View the Survival guide",
         "注目カード": "Featured cards", "次に開くカードを決めよう": "Choose the next card to open", "初日の立ち上がり、洞窟探索、拠点づくり、次の遠征準備まで。今いちばん困っている場面から読み進められるサバイバルハブです。": "From getting started on day one through cave exploration, base building, and preparing for the next expedition, this Survival hub lets you begin with the challenge you face now.", "迷ったらスタートガイド、次の目標を決めたいなら進行ルートから読むのがおすすめです。": "When unsure, start with the start guide; use the progression route to choose your next objective.", "トップへ戻る": "Back to top",
     });
-
     const elementTranslations = {
         home: {
             ".survival-p1": "Learn the decisions that matter most: your first day, a reliable base, and the order to explore.",
@@ -203,79 +198,86 @@
             ".build-section-heading h2": "Frame builds that stay with the landscape.",
         },
     };
-
     function stored(key) {
-        try { return localStorage.getItem(key); } catch (_) { return null; }
+        try {
+            return localStorage.getItem(key);
+        }
+        catch (_) {
+            return null;
+        }
     }
-
     function save(key, value) {
-        try { localStorage.setItem(key, value); } catch (_) { /* Private browsing can disable storage. */ }
+        try {
+            localStorage.setItem(key, value);
+        }
+        catch (_) { /* Private browsing can disable storage. */ }
     }
-
     function preferredTheme() {
         const saved = stored(storageKeys.theme);
-        if (supportedThemes.has(saved)) return saved;
+        if (supportedThemes.has(saved))
+            return saved;
         return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     }
-
     function preferredLanguage() {
         const saved = stored(storageKeys.language);
-        if (supportedLanguages.has(saved)) return saved;
+        if (supportedLanguages.has(saved))
+            return saved;
         return (navigator.language || "ja").toLowerCase().startsWith("ja") ? "ja" : "en";
     }
-
     let state = {
         theme: preferredTheme(),
         language: preferredLanguage(),
         themeSource: supportedThemes.has(stored(storageKeys.theme)) ? "manual" : "auto",
         languageSource: supportedLanguages.has(stored(storageKeys.language)) ? "manual" : "auto",
     };
-
     // Apply before the stylesheet is parsed so the selected device/manual theme never flashes.
     document.documentElement.dataset.colorScheme = state.theme;
     document.documentElement.lang = state.language;
-
     function translateText(value) {
-        if (state.language !== "en" || typeof value !== "string") return value;
+        if (state.language !== "en" || typeof value !== "string")
+            return value;
         return textTranslations[value] || value;
     }
-
     function applyTextTranslations(root) {
-        if (state.language !== "en") return;
+        if (state.language !== "en")
+            return;
         const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_TEXT);
         const textNodes = [];
-        while (walker.nextNode()) textNodes.push(walker.currentNode);
+        while (walker.nextNode())
+            textNodes.push(walker.currentNode);
         textNodes.forEach((node) => {
             const original = node.nodeValue.trim().replace(/\s+/g, " ");
-            if (!original || !textTranslations[original]) return;
+            if (!original || !textTranslations[original])
+                return;
             const leading = node.nodeValue.match(/^\s*/)[0];
             const trailing = node.nodeValue.match(/\s*$/)[0];
             node.nodeValue = `${leading}${textTranslations[original]}${trailing}`;
         });
-
         const view = document.documentElement.dataset.viewTheme;
         const translations = elementTranslations[view];
-        if (!translations) return;
+        if (!translations)
+            return;
         Object.entries(translations).forEach(([selector, translation]) => {
             document.querySelectorAll(selector).forEach((element) => {
-                if (element.dataset.i18nTranslated === "true") return;
+                if (element.dataset.i18nTranslated === "true")
+                    return;
                 element.innerHTML = translation;
                 element.dataset.i18nTranslated = "true";
             });
         });
     }
-
     function localizeHeaderConfig(config) {
-        if (state.language !== "en" || !config || !Array.isArray(config.links)) return config;
+        if (state.language !== "en" || !config || !Array.isArray(config.links))
+            return config;
         const view = document.documentElement.dataset.viewTheme || (document.body.classList.contains("licenses-page") ? "licenses" : "");
         const localized = localizedConfigs[view];
-        if (!localized) return config;
+        if (!localized)
+            return config;
         return {
             ...config,
             links: config.links.map((link, index) => ({ ...link, text: localized.links[index] || translateText(link.text) })),
         };
     }
-
     function updateMetadata() {
         document.documentElement.lang = state.language;
         const titles = {
@@ -288,11 +290,12 @@
             notFound: "404 - Page Not Found",
         };
         const view = document.documentElement.dataset.viewTheme || (document.body.classList.contains("licenses-page") ? "licenses" : document.body.classList.contains("not-found-page") ? "notFound" : "");
-        if (state.language === "en" && titles[view]) document.title = titles[view];
+        if (state.language === "en" && titles[view])
+            document.title = titles[view];
     }
-
     function updateLocalizedAttributes() {
-        if (state.language !== "en") return;
+        if (state.language !== "en")
+            return;
         const attributes = {
             "サバイバルページ内メニュー": "Survival page navigation",
             "前のバイオームへ": "Previous biome",
@@ -327,10 +330,10 @@
         document.querySelectorAll("[alt], [aria-label]").forEach((element) => {
             ["alt", "aria-label"].forEach((attribute) => {
                 const source = element.getAttribute(attribute);
-                if (source && attributes[source]) element.setAttribute(attribute, attributes[source]);
+                if (source && attributes[source])
+                    element.setAttribute(attribute, attributes[source]);
             });
         });
-
         const descriptions = {
             home: "Welcome to a Minecraft fan site with guides for Survival, PVP, and Build playstyles.",
             survival: "A Survival portal for learning the essentials of staying alive, building a base, and exploring.",
@@ -342,7 +345,6 @@
             document.querySelectorAll('meta[name="description"], meta[property="og:description"]').forEach((meta) => meta.content = descriptions[view]);
         }
     }
-
     function updateControls(root) {
         (root || document).querySelectorAll("[data-site-preferences]").forEach((controls) => {
             controls.setAttribute("aria-label", state.language === "en" ? "Display preferences" : "表示設定");
@@ -365,12 +367,14 @@
                 autoButton.hidden = state.themeSource === "auto" && state.languageSource === "auto";
                 autoButton.setAttribute("aria-label", state.language === "en" ? "Use device preferences" : "端末の設定に戻す");
             }
-            if (themeLabel) themeLabel.textContent = state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク");
-            if (languageLabel) languageLabel.textContent = state.language === "en" ? "JA" : "EN";
-            if (autoLabel) autoLabel.textContent = state.language === "en" ? "Auto" : "自動";
+            if (themeLabel)
+                themeLabel.textContent = state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク");
+            if (languageLabel)
+                languageLabel.textContent = state.language === "en" ? "JA" : "EN";
+            if (autoLabel)
+                autoLabel.textContent = state.language === "en" ? "Auto" : "自動";
         });
     }
-
     function apply() {
         document.documentElement.dataset.colorScheme = state.theme;
         updateMetadata();
@@ -379,23 +383,22 @@
         updateControls();
         document.dispatchEvent(new CustomEvent("sitepreferenceschange", { detail: { ...state } }));
     }
-
     function setTheme(theme) {
-        if (!supportedThemes.has(theme)) return;
+        if (!supportedThemes.has(theme))
+            return;
         state.theme = theme;
         state.themeSource = "manual";
         save(storageKeys.theme, theme);
         apply();
     }
-
     function setLanguage(language) {
-        if (!supportedLanguages.has(language)) return;
+        if (!supportedLanguages.has(language))
+            return;
         state.language = language;
         state.languageSource = "manual";
         save(storageKeys.language, language);
         window.location.reload();
     }
-
     document.addEventListener("click", (event) => {
         const themeToggle = event.target.closest("[data-theme-toggle]");
         if (themeToggle) {
@@ -406,20 +409,22 @@
             setLanguage(state.language === "ja" ? "en" : "ja");
             return;
         }
-        if (event.target.closest("[data-preferences-auto]")) window.SitePreferences.resetToAutomatic();
+        if (event.target.closest("[data-preferences-auto]"))
+            window.SitePreferences.resetToAutomatic();
     });
-
     if (window.matchMedia) {
         const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
         const updateAutomaticTheme = (event) => {
-            if (state.themeSource !== "auto") return;
+            if (state.themeSource !== "auto")
+                return;
             state.theme = event.matches ? "dark" : "light";
             apply();
         };
-        if (typeof systemTheme.addEventListener === "function") systemTheme.addEventListener("change", updateAutomaticTheme);
-        else if (typeof systemTheme.addListener === "function") systemTheme.addListener(updateAutomaticTheme);
+        if (typeof systemTheme.addEventListener === "function")
+            systemTheme.addEventListener("change", updateAutomaticTheme);
+        else if (typeof systemTheme.addListener === "function")
+            systemTheme.addListener(updateAutomaticTheme);
     }
-
     document.addEventListener("DOMContentLoaded", () => {
         apply();
         if (!document.querySelector("[data-site-preferences]") && document.body.classList.contains("not-found-page")) {
@@ -431,13 +436,11 @@
             updateControls(controls);
         }
     });
-
     document.addEventListener("sitepreferencescontentready", (event) => {
         applyTextTranslations(event.detail && event.detail.target);
         updateLocalizedAttributes();
         updateControls(event.detail && event.detail.target);
     });
-
     window.SitePreferences = {
         getState: () => ({ ...state }),
         translateText,
@@ -447,7 +450,8 @@
             try {
                 localStorage.removeItem(storageKeys.theme);
                 localStorage.removeItem(storageKeys.language);
-            } catch (_) { /* Storage may be unavailable. */ }
+            }
+            catch (_) { /* Storage may be unavailable. */ }
             state = { theme: preferredTheme(), language: preferredLanguage(), themeSource: "auto", languageSource: "auto" };
             window.location.reload();
         },
