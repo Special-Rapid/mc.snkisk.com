@@ -130,9 +130,11 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 ## 読み込み・復旧・表示設定の内部契約
 
-Node用の実行構文比較処理は `scripts/src/compare-runtime.mts` を正本とし、NodeNext strict設定から既存の `scripts/compare-runtime.mjs` へ生成します。`npm run compare:runtime -- <commit>` の呼出先と比較基準、実行構文の正規化・ファイル選別・出力を保持し、CIで生成MJSの差分も検査します。
+Node用fallback生成処理の正本は `scripts/src/build-component-fallbacks.mts` です。`tsconfig.node-tools.json` でstrict検査し、`npm run build` が既存の `scripts/build-component-fallbacks.mjs` へ生成してから実行します。生成MJSもコミットし、CIで再生成の差分を検査します。ブラウザ用20本のTSとは別のNode ESM設定を使い、呼出先とcomponent出力を保持します。
 
-この1本の移行は [Issue #14](https://github.com/Special-Rapid/mc.snkisk.com/issues/14) で扱います。fallback生成処理は [PR #13](https://github.com/Special-Rapid/mc.snkisk.com/pull/13) の別単位で、テスト3本は手書きMJSのままです。全Node移行完了とは扱いません。
+Node用の実行構文比較処理は `scripts/src/compare-runtime.mts` を正本とし、同じNodeNext strict設定から既存の `scripts/compare-runtime.mjs` へ生成します。`npm run compare:runtime -- <commit>` の呼出先と比較基準、実行構文の正規化・ファイル選別・出力を保持し、CIで両生成MJSの差分を検査します。
+
+fallback生成処理は [Issue #12](https://github.com/Special-Rapid/mc.snkisk.com/issues/12)、比較処理は [Issue #14](https://github.com/Special-Rapid/mc.snkisk.com/issues/14) で扱います。テスト3本は [PR #17](https://github.com/Special-Rapid/mc.snkisk.com/pull/17) の別単位で移行し、この段階のNode全体の移行完了には含めません。
 
 componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
 
