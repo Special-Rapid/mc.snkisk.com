@@ -130,6 +130,10 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 ## 読み込み・復旧・表示設定の内部契約
 
+Node用の実行構文比較処理は `scripts/src/compare-runtime.mts` を正本とし、NodeNext strict設定から既存の `scripts/compare-runtime.mjs` へ生成します。`npm run compare:runtime -- <commit>` の呼出先と比較基準、実行構文の正規化・ファイル選別・出力を保持し、CIで生成MJSの差分も検査します。
+
+この1本の移行は [Issue #14](https://github.com/Special-Rapid/mc.snkisk.com/issues/14) で扱います。fallback生成処理は [PR #13](https://github.com/Special-Rapid/mc.snkisk.com/pull/13) の別単位で、テスト3本は手書きMJSのままです。全Node移行完了とは扱いません。
+
 componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
 
 動画の完了は先頭から連続したbufferとreadyStateで判定します。URLはブラウザと同じ正規化後のprotocolで検証し、JSON設定は既知の文字列フィールドだけ採用します。
