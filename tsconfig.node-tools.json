@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2020"],
+    "types": ["node"],
+    "strict": true,
+    "noEmitOnError": true,
+    "rootDir": "scripts/src",
+    "outDir": "scripts"
+  },
+  "include": ["scripts/src/**/*.mts"],
+  "exclude": []
+}
