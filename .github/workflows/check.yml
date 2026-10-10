@@ -13,4 +13,4 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - run: git diff --exit-code -- js tests
+      - run: git diff --exit-code -- js scripts/build-component-fallbacks.mjs scripts/compare-runtime.mjs tests
