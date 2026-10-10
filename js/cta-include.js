@@ -29,7 +29,7 @@ function renderCtaContent(ctaTarget) {
     if (!raw)
         return;
     try {
-        const config = JSON.parse(raw);
+        const config = parseSiteCtaConfig(raw);
         const translate = window.SitePreferences && typeof window.SitePreferences.translateText === "function"
             ? window.SitePreferences.translateText
             : (value) => value;

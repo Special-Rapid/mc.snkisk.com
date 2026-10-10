@@ -57,7 +57,7 @@ function renderHeaderContent(headerTarget: HTMLElement) {
     }
 
     try {
-        let config = JSON.parse(raw) as SiteHeaderConfig;
+        let config = parseSiteHeaderConfig(raw);
         if (window.SitePreferences && typeof window.SitePreferences.localizeHeaderConfig === "function") {
             config = window.SitePreferences.localizeHeaderConfig(config);
         }

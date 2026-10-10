@@ -1,5 +1,6 @@
 (function () {
     const MEDIA_SELECTOR = "img, video";
+    const MEDIA_WAIT_TIMEOUT_MS = 40000;
     const CACHE_BUST_PARAM = "skeletonRetry";
     const mediaReady = window.SiteMediaReady;
     if (!mediaReady) {
@@ -61,6 +62,9 @@
         let retryButton = null;
         let errorStatus = null;
         let retryBusy = false;
+        let timeoutId = 0;
+        let timedOut = false;
+        let lazyObserver;
         let restoreTabIndex = null;
         const previousMedia = wrapper.__siteSkeletonMedia;
         if (!shouldForce && wrapper.dataset.skeletonUiInitialized === "true" && previousMedia === media) {
@@ -93,8 +97,28 @@
             errorStatus = null;
             retryBusy = false;
         };
+        const updateErrorText = () => {
+            if (!retryButton || !errorStatus)
+                return;
+            const language = window.SitePreferences?.getState().language || "ja";
+            const strings = window.SiteMediaMessages[language];
+            const video = media instanceof HTMLVideoElement;
+            const kind = video ? strings.video : strings.image;
+            const statusKind = video ? strings.videoStatus : strings.imageStatus;
+            const label = media.getAttribute("alt") || kind;
+            retryButton.setAttribute("aria-label", strings.reloadLabel.replace("{label}", label));
+            retryButton.textContent = retryBusy ? strings.reloading : strings.reload;
+            errorStatus.textContent = (retryBusy ? strings.loadingStatus : strings.failedStatus).replace("{kind}", retryBusy ? statusKind : kind);
+        };
+        const startDeadline = () => {
+            window.clearTimeout(timeoutId);
+            timedOut = false;
+            timeoutId = window.setTimeout(() => {
+                timedOut = true;
+                syncState();
+            }, MEDIA_WAIT_TIMEOUT_MS);
+        };
         const showErrorUI = () => {
-            const kind = media instanceof HTMLVideoElement ? "動画" : "画像";
             if (!retryButton) {
                 errorStatus = document.createElement("span");
                 errorStatus.className = "skeleton-media__status";
@@ -103,14 +127,13 @@
                 retryButton = document.createElement("button");
                 retryButton.type = "button";
                 retryButton.className = "skeleton-media__retry";
-                retryButton.setAttribute("aria-label", `${media.getAttribute("alt") || kind}を再読み込み`);
                 retryButton.addEventListener("click", () => {
                     if (retryBusy || !getOriginalSource(media))
                         return;
                     retryBusy = true;
                     retryButton.setAttribute("aria-disabled", "true");
-                    retryButton.textContent = "再読み込み中…";
-                    errorStatus.textContent = `${kind}を再読み込み中です。`;
+                    updateErrorText();
+                    startDeadline();
                     wrapper.setAttribute("aria-busy", "true");
                     retryMedia(media, wrapper);
                 });
@@ -118,17 +141,18 @@
             }
             retryBusy = false;
             retryButton.setAttribute("aria-disabled", "false");
-            retryButton.textContent = "再読み込み";
-            errorStatus.textContent = `${kind}を読み込めませんでした。`;
+            updateErrorText();
         };
         const syncState = () => {
             if (mediaReady.isMediaLoaded(media)) {
+                window.clearTimeout(timeoutId);
                 setState(wrapper, "loaded");
                 wrapper.setAttribute("aria-busy", "false");
                 clearErrorUI();
                 return;
             }
-            if (mediaReady.isMediaFailed(media)) {
+            if (timedOut || mediaReady.isMediaFailed(media)) {
+                window.clearTimeout(timeoutId);
                 setState(wrapper, "error");
                 wrapper.setAttribute("aria-busy", "false");
                 showErrorUI();
@@ -150,7 +174,24 @@
             return;
         }
         getOriginalSource(media);
+        if (media instanceof HTMLImageElement && media.loading === "lazy" && "IntersectionObserver" in window) {
+            // 未要求のlazy画像を失敗にしない。可視近傍に入ってから期限を計る。
+            lazyObserver = new IntersectionObserver(entries => {
+                if (!entries.some(entry => entry.isIntersecting))
+                    return;
+                lazyObserver?.disconnect();
+                startDeadline();
+                syncState();
+            }, { rootMargin: "300px 0px", threshold: 0.01 });
+            lazyObserver.observe(wrapper);
+        }
+        else {
+            if (media instanceof HTMLImageElement && media.loading === "lazy")
+                media.loading = "eager";
+            startDeadline();
+        }
         syncState();
+        document.addEventListener("sitepreferenceschange", updateErrorText);
         const mediaEvents = ["load", "loadeddata", "loadedmetadata", "canplay", "canplaythrough", "progress", "durationchange", "playing", "stalled", "suspend", "waiting", "error"];
         mediaEvents.forEach((eventName) => {
             media.addEventListener(eventName, syncState);
@@ -158,6 +199,9 @@
         wrapper.dataset.skeletonUiInitialized = "true";
         wrapper.__siteSkeletonMedia = media;
         wrapper.__siteSkeletonCleanup = () => {
+            window.clearTimeout(timeoutId);
+            lazyObserver?.disconnect();
+            document.removeEventListener("sitepreferenceschange", updateErrorText);
             mediaEvents.forEach((eventName) => {
                 media.removeEventListener(eventName, syncState);
             });

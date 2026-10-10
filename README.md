@@ -111,7 +111,7 @@ https://mc.snkisk.com (以下このウェブサイト) は、ファンが独自�
 
 ## 開発と型検査
 
-自作スクリプト17本の正本は `src/*.ts` です。classic scriptの公開グローバル、HTMLの読み込み順と `js/*.js` のURLを保持するため、バンドラーやframeworkへの置換は行いません。`src/site-types.d.ts` にDOM・設定・読み込み状態・共有APIの契約を置きます。
+既存17本と追加3本、計20本の自作スクリプトの正本は `src/*.ts` です。classic scriptの公開グローバル、HTMLの読み込み順と `js/*.js` のURLを保持するため、バンドラーやframeworkへの置換は行いません。`src/site-types.d.ts` にDOM・設定・読み込み状態・共有APIの契約を置きます。
 
 ```sh
 npm ci
@@ -123,6 +123,12 @@ python3 -m http.server 4173 --bind 127.0.0.1
 
 移行は `allowJs` / `checkJs` の入口、メディア判定とリンクの純粋処理、読み込み・コンポーネント境界、ページUI・表示設定の順で進めました。17本の型消去後の実行構文を `npm run compare:runtime` で基準main `f6fc2ab` と比較できます。この比較は挙動変更を分離した型移行PR専用です。
 
-`js/vendor/` は第三者の配布物としてTS移行の対象外です。HTML/CSS、Nodeの検証スクリプト、設定とメディアのmanifestもそれぞれの形式を維持します。コンパイル専用 `*.type-test.ts` はJavaScript生成の対象外です。依存は開発用のTypeScriptと既存vendor用の型宣言のみで、利用者へ新しいライブラリを配信しません。
+`js/vendor/` は第三者の配布物としてTS移行の対象外です。HTML/CSS、Nodeの検証スクリプト、設定とメディアのmanifestもそれぞれの形式を維持します。コンパイル専用 `*.type-test.ts` はJavaScript生成の対象外です。開発依存はTypeScript、既存vendor用の型宣言、境界テスト用のjsdomで、利用者へ新しいライブラリを配信しません。
 
 [型移行Issue #8](https://github.com/Special-Rapid/mc.snkisk.com/issues/8) と、挙動を変える内部改善は別のPRでレビューします。
+
+## 読み込みと復旧の境界
+
+共通部品fetchは15秒、画像・動画と再試行は40秒を期限とし、成功・失敗・時間切れを区別します。lazy画像は可視近傍へ入ってから期限を開始します。取得できない既知componentはbuild時に原本から生成したfallbackで復旧し、未知のpathは取得しません。URLはブラウザの正規化で検証し、JSON設定は既知のstring項目を採用します。
+
+メディアの失敗・再試行文言はJA/ENのresourceへ集約します。追加依存のjsdomはローカル境界テスト専用です。表示設定のreload撤去・原文復元は後続commitで扱います。

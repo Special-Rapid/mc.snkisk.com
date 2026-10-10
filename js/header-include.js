@@ -42,7 +42,7 @@ function renderHeaderContent(headerTarget) {
         return;
     }
     try {
-        let config = JSON.parse(raw);
+        let config = parseSiteHeaderConfig(raw);
         if (window.SitePreferences && typeof window.SitePreferences.localizeHeaderConfig === "function") {
             config = window.SitePreferences.localizeHeaderConfig(config);
         }

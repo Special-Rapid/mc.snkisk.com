@@ -70,10 +70,11 @@
             },
         };
     }
-    const overlayController = createBarController();
-    if (!overlayController) {
-        return;
-    }
+    const overlayController = createBarController() || {
+        setProgress(_progress) { },
+        getProgress() { return 1; },
+        hide: hideOverlayWithFallback,
+    };
     let isHidden = false;
     let targetProgress = 0;
     let visibleProgress = 0;

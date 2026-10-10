@@ -18,7 +18,7 @@ function renderFooterLinks(footerTarget) {
         return;
     }
     try {
-        const links = JSON.parse(raw);
+        const links = parseSiteFooterLinks(raw);
         if (!Array.isArray(links) || links.length === 0) {
             linksContainer.style.display = "none";
             return;

@@ -43,142 +43,6 @@
         window.addEventListener("pageshow", forceScrollToTop, { once: true });
         window.addEventListener("load", forceScrollToTop, { once: true });
     }
-    function createLoadTracker() {
-        const tasks = new Map();
-        const listeners = new Set();
-        function snapshotTask(task) {
-            return {
-                id: task.id,
-                kind: task.kind,
-                label: task.label,
-                progress: clampProgress(task.progress),
-                loadedBytes: task.loadedBytes,
-                totalBytes: task.totalBytes,
-                isComplete: task.isComplete,
-                isFailed: task.isFailed,
-                isIndeterminate: task.isIndeterminate,
-            };
-        }
-        function computeProgress() {
-            const taskList = Array.from(tasks.values());
-            if (!taskList.length) {
-                return {
-                    progress: 1,
-                    isComplete: true,
-                    tasks: [],
-                };
-            }
-            const totalProgress = taskList.reduce((sum, task) => {
-                return sum + clampProgress(task.progress);
-            }, 0);
-            const isComplete = taskList.every((task) => task.isComplete || task.isFailed);
-            return {
-                progress: clampProgress(totalProgress / taskList.length),
-                isComplete,
-                tasks: taskList.map(snapshotTask),
-            };
-        }
-        function notify() {
-            const state = computeProgress();
-            listeners.forEach((listener) => {
-                listener(state);
-            });
-        }
-        function ensureTask(id, defaults) {
-            const existing = tasks.get(id);
-            if (existing) {
-                return existing;
-            }
-            const task = {
-                id,
-                kind: defaults && defaults.kind ? defaults.kind : "generic",
-                label: defaults && defaults.label ? defaults.label : id,
-                progress: 0,
-                loadedBytes: 0,
-                totalBytes: 0,
-                isComplete: false,
-                isFailed: false,
-                isIndeterminate: false,
-            };
-            tasks.set(id, task);
-            return task;
-        }
-        function syncTaskProgress(task) {
-            if (Number.isFinite(task.totalBytes) && task.totalBytes > 0) {
-                task.progress = clampProgress(task.loadedBytes / task.totalBytes);
-                return;
-            }
-            task.progress = clampProgress(task.progress);
-        }
-        return {
-            registerTask(id, defaults) {
-                ensureTask(id, defaults);
-                notify();
-            },
-            updateTask(id, patch) {
-                const task = ensureTask(id, patch);
-                const nextPatch = patch || {};
-                if (nextPatch.kind) {
-                    task.kind = nextPatch.kind;
-                }
-                if (nextPatch.label) {
-                    task.label = nextPatch.label;
-                }
-                if (typeof nextPatch.loadedBytes === "number" && Number.isFinite(nextPatch.loadedBytes)) {
-                    task.loadedBytes = Math.max(nextPatch.loadedBytes, 0);
-                }
-                if (typeof nextPatch.totalBytes === "number" && Number.isFinite(nextPatch.totalBytes)) {
-                    task.totalBytes = Math.max(nextPatch.totalBytes, 0);
-                }
-                if (typeof nextPatch.progress === "number" && Number.isFinite(nextPatch.progress)) {
-                    task.progress = clampProgress(nextPatch.progress);
-                }
-                if (typeof nextPatch.isIndeterminate === "boolean") {
-                    task.isIndeterminate = nextPatch.isIndeterminate;
-                }
-                if (typeof nextPatch.isComplete === "boolean") {
-                    task.isComplete = nextPatch.isComplete;
-                }
-                if (typeof nextPatch.isFailed === "boolean") {
-                    task.isFailed = nextPatch.isFailed;
-                }
-                syncTaskProgress(task);
-                notify();
-            },
-            completeTask(id) {
-                const task = ensureTask(id);
-                task.progress = 1;
-                if (Number.isFinite(task.totalBytes) && task.totalBytes > 0) {
-                    task.loadedBytes = task.totalBytes;
-                }
-                task.isComplete = true;
-                task.isFailed = false;
-                syncTaskProgress(task);
-                notify();
-            },
-            failTask(id) {
-                const task = ensureTask(id);
-                task.progress = 1;
-                if (Number.isFinite(task.totalBytes) && task.totalBytes > 0) {
-                    task.loadedBytes = task.totalBytes;
-                }
-                task.isComplete = true;
-                task.isFailed = true;
-                syncTaskProgress(task);
-                notify();
-            },
-            getProgress() {
-                return computeProgress();
-            },
-            subscribe(listener) {
-                listeners.add(listener);
-                listener(computeProgress());
-                return function unsubscribe() {
-                    listeners.delete(listener);
-                };
-            },
-        };
-    }
     function registerIncludeTasks(tracker) {
         const includeDefinitions = [
             {
@@ -267,20 +131,30 @@
     }
     function waitForImage(image, tracker, taskId) {
         return new Promise((resolve) => {
-            const complete = () => {
-                tracker.completeTask(taskId);
+            let settled = false;
+            let timer = 0;
+            const settle = (failed) => {
+                if (settled)
+                    return;
+                settled = true;
+                window.clearTimeout(timer);
+                image.removeEventListener("load", complete);
+                image.removeEventListener("error", fail);
+                if (failed)
+                    tracker.failTask(taskId);
+                else
+                    tracker.completeTask(taskId);
                 resolve();
             };
-            const fail = () => {
-                tracker.failTask(taskId);
-                resolve();
-            };
+            const complete = () => settle(!mediaReady.isMediaLoaded(image));
+            const fail = () => settle(true);
             if (image.complete) {
                 complete();
                 return;
             }
-            image.addEventListener("load", complete, { once: true });
-            image.addEventListener("error", fail, { once: true });
+            image.addEventListener("load", complete);
+            image.addEventListener("error", fail);
+            timer = window.setTimeout(fail, VIDEO_WAIT_TIMEOUT_MS);
         });
     }
     function waitForVideo(video, tracker, taskId) {
@@ -354,7 +228,7 @@
             };
             waitTimeoutId = window.setTimeout(() => {
                 syncProgress();
-                settle(false);
+                settle(true);
             }, VIDEO_WAIT_TIMEOUT_MS);
             video.addEventListener("canplaythrough", onCanPlayThrough);
             video.addEventListener("canplay", onBufferUpdate);
@@ -382,65 +256,25 @@
     }
     async function fetchTrackedText(url, options, taskId) {
         const tracker = window.__siteInitialLoadTracker;
-        if (!tracker || !taskId) {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                throw new Error(`Failed to load ${url}: ${response.status}`);
-            }
-            return response.text();
-        }
-        tracker.updateTask(taskId, {
-            kind: "fetch",
-            label: url,
-            progress: 0,
-        });
+        if (tracker && taskId)
+            tracker.updateTask(taskId, { kind: "fetch", label: url });
         try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                throw new Error(`Failed to load ${url}: ${response.status}`);
-            }
-            const totalBytes = Number.parseInt(response.headers.get("Content-Length") || "", 10);
-            const canStream = response.body && typeof response.body.getReader === "function";
-            if (!canStream) {
-                tracker.updateTask(taskId, {
-                    isIndeterminate: true,
-                });
-                const text = await response.text();
-                tracker.completeTask(taskId);
-                return text;
-            }
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            const chunks = [];
-            let loadedBytes = 0;
-            tracker.updateTask(taskId, {
-                totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0,
-                isIndeterminate: !(Number.isFinite(totalBytes) && totalBytes > 0),
+            const text = await window.SiteTextLoader.load(url, options, (progress) => {
+                if (tracker && taskId)
+                    tracker.updateTask(taskId, progress);
             });
-            while (true) {
-                const result = await reader.read();
-                if (result.done) {
-                    break;
-                }
-                if (result.value) {
-                    loadedBytes += result.value.byteLength;
-                    chunks.push(decoder.decode(result.value, { stream: true }));
-                    tracker.updateTask(taskId, {
-                        loadedBytes,
-                    });
-                }
-            }
-            chunks.push(decoder.decode());
-            tracker.completeTask(taskId);
-            return chunks.join("");
+            if (tracker && taskId)
+                tracker.completeTask(taskId);
+            return text;
         }
         catch (error) {
-            tracker.failTask(taskId);
+            if (tracker && taskId)
+                tracker.failTask(taskId);
             throw error;
         }
     }
     initReloadScrollReset();
-    const tracker = createLoadTracker();
+    const tracker = window.SiteLoadTracker.create();
     window.__siteInitialLoadTracker = tracker;
     window.__siteInitialLoadFetchText = fetchTrackedText;
     document.body.classList.add("is-initial-loading");
@@ -472,5 +306,8 @@
         unsubscribe();
         finishInitialLoading();
     });
+    // subscribeは現在値を同期通知する。購読時点で完了済みの場合も解除する。
+    if (tracker.getProgress().isComplete)
+        unsubscribe();
     Promise.all(mediaTasks).catch(() => { });
 }());

@@ -31,7 +31,13 @@ interface HTMLElement {
  __siteSkeletonMedia?: SiteMedia | null;
  __siteSkeletonCleanup?: (() => void) | null;
 }
+interface SiteTextProgress { loadedBytes: number; totalBytes: number; isIndeterminate: boolean }
+type SiteComponentPath = "components/header.html" | "components/cta.html" | "components/footer.html";
 interface Window {
+ SiteMediaMessages: Record<SiteLanguage, { image: string; video: string; imageStatus: string; videoStatus: string; reload: string; reloading: string; reloadLabel: string; loadingStatus: string; failedStatus: string }>;
+ SiteTextLoader: { load(url: string, options?: RequestInit, onProgress?: (progress: SiteTextProgress) => void): Promise<string>; TIMEOUT_MS: number };
+ SiteLoadTracker: { create(): SiteLoadTracker };
+ SiteComponentTemplates: Readonly<Record<SiteComponentPath, string>>;
  jQuery: JQueryStatic;
  ProgressBar: typeof import('progressbar.js');
  SiteMediaReady: {

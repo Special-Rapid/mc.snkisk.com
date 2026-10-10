@@ -22,7 +22,7 @@ function renderFooterLinks(footerTarget: HTMLElement) {
     }
 
     try {
-        const links = JSON.parse(raw) as SiteLinkConfig[];
+        const links = parseSiteFooterLinks(raw);
 
         if (!Array.isArray(links) || links.length === 0) {
             linksContainer.style.display = "none";

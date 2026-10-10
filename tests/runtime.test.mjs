@@ -28,7 +28,7 @@ test('画像の成功・失敗を区別し、未完了を成功にしない', ()
 });
 test('動画の表示進捗と厳格完了条件を分離する', () => {
  const { window } = context(); const video = new VideoElement(); const ready = window.SiteMediaReady;
- video.readyState = 3; video.networkState = 2; video.buffered = { length: 1, end: () => 10 };
+ video.readyState = 3; video.networkState = 2; video.buffered = { length: 1, start: () => 0, end: () => 10 };
  assert.equal(ready.isVideoStrictReady(video), false);
  assert.ok(ready.getVideoDisplayProgress(video) <= .94);
  video.readyState = 4;
@@ -60,4 +60,35 @@ test('外部リンクはnoopener/noreferrerを保持し、無効設定を表示�
  assert.deepEqual(new Set(anchor.rel.split(' ')), new Set(['author', 'noopener', 'noreferrer']));
  assert.equal(sandbox.applySafeLink(anchor, { href: 'javascript:x', text: '不正' }), false);
  assert.equal(anchor.style.display, 'none');
+});
+
+test('URL正規化で改行やtab付きの実行schemeを拒否する', () => {
+ const { sandbox } = context();
+ for (const value of ['java\nscript:alert(1)', 'java\tscript:alert(1)', '\u0000javascript:alert(1)']) assert.equal(sandbox.isSafeUrl(value), false);
+});
+test('動画bufferに穴があれば全体完了を誤認しない', () => {
+ const { window } = context(); const video = new VideoElement();
+ video.readyState = 4; video.buffered = { length: 2, start: i => [0, 8][i], end: i => [2, 10][i] };
+ assert.equal(window.SiteMediaReady.getVideoBufferedProgress(video), .2);
+ assert.equal(window.SiteMediaReady.isVideoStrictReady(video), false);
+});
+test('JSON設定から文字列以外と不正構造を除外する', () => {
+ const { sandbox } = context();
+ const header = sandbox.parseSiteHeaderConfig('{"homeHref":123,"links":[null,{"href":"/","text":"Home","target":false}]}');
+ assert.equal(header.homeHref, undefined); assert.equal(header.links[0].href, undefined);
+ assert.equal(header.links[1].href, '/'); assert.equal(header.links[1].target, undefined);
+ assert.equal(sandbox.parseSiteCtaConfig('null').primary.href, undefined);
+ assert.equal(sandbox.parseSiteFooterLinks('{}').length, 0);
+});
+test('trackerは有限単調な進捗と最初の終端状態を保持しsnapshotを分離する', () => {
+ const window = {}; vm.runInNewContext(readFileSync('js/load-tracker.js', 'utf8'), { window });
+ const tracker = window.SiteLoadTracker.create(); tracker.registerTask('image');
+ tracker.updateTask('image', { progress: .8 }); tracker.updateTask('image', { progress: .2 });
+ assert.equal(tracker.getProgress().progress, .8);
+ tracker.updateTask('image', { progress: Infinity, loadedBytes: NaN }); assert.equal(tracker.getProgress().progress, .8);
+ const snapshot = tracker.getProgress(); snapshot.tasks[0].progress = -5;
+ assert.equal(tracker.getProgress().progress, .8);
+ tracker.failTask('image'); tracker.completeTask('image'); tracker.updateTask('image', { progress: 0, isFailed: false });
+ assert.equal(tracker.getProgress().isComplete, true); assert.equal(tracker.getProgress().tasks[0].isFailed, true);
+ let calls = 0; const unsubscribe = tracker.subscribe(() => calls++); unsubscribe(); tracker.registerTask('later'); assert.equal(calls, 1);
 });
