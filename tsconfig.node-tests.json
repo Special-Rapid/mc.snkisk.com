@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "jquery",
+      "progressbar.js"
+    ],
+    "strict": true,
+    "noEmitOnError": true,
+    "rootDir": "tests/src",
+    "outDir": "tests"
+  },
+  "include": [
+    "tests/src/**/*.mts",
+    "tests/src/**/*.d.ts",
+    "src/site-types.d.ts"
+  ],
+  "exclude": []
+}

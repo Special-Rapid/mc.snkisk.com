@@ -134,7 +134,9 @@ Node用fallback生成処理の正本は `scripts/src/build-component-fallbacks.m
 
 Node用の実行構文比較処理は `scripts/src/compare-runtime.mts` を正本とし、同じNodeNext strict設定から既存の `scripts/compare-runtime.mjs` へ生成します。`npm run compare:runtime -- <commit>` の呼出先と比較基準、実行構文の正規化・ファイル選別・出力を保持し、CIで両生成MJSの差分を検査します。
 
-fallback生成処理は [Issue #12](https://github.com/Special-Rapid/mc.snkisk.com/issues/12)、比較処理は [Issue #14](https://github.com/Special-Rapid/mc.snkisk.com/issues/14) で扱います。テスト3本は [PR #17](https://github.com/Special-Rapid/mc.snkisk.com/pull/17) の別単位で移行し、この段階のNode全体の移行完了には含めません。
+Node回帰テスト3本は `tests/src/*.test.mts` を正本に、`tsconfig.node-tests.json` のstrict NodeNext設定で既存の `tests/*.test.mjs` へ生成します。ES2022を使ってテスト内のclass fieldを保持し、DOM・VM・timerのfixture境界を具体的な型で表します。`npm run check` がブラウザ・Node補助2本・テスト3本の型検査、再生成、既存47テストを実行し、CIで全生成物の差分を検査します。
+
+fallback生成処理は [Issue #12](https://github.com/Special-Rapid/mc.snkisk.com/issues/12)、比較処理は [Issue #14](https://github.com/Special-Rapid/mc.snkisk.com/issues/14)、テスト3本は [Issue #16](https://github.com/Special-Rapid/mc.snkisk.com/issues/16) の単位で扱います。これら自作Nodeコード5本の正本はstrict TypeScriptで、既存のMJS実行先を保持します。
 
 componentのテキスト取得は15秒、初期待機とSkeletonのメディア待機は40秒で失敗へ移ります。失敗を成功と区別したまま初期待機を解除し、メディアは個別の再読み込みで復旧できます。component取得失敗時は、`npm run build` が同じ `components/*.html` から生成した原本を使用し、headerの導線を保持します。`js/component-fallbacks.js` を手で変更しません。
 
