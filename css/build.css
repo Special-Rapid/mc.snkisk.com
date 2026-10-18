@@ -37,7 +37,7 @@
     position: fixed;
     top: 0;
     height: 76px;
-    background: linear-gradient(180deg, rgba(3, 7, 11, 0.26), rgba(3, 7, 11, 0));
+    background: var(--build-bg);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(4px);
     box-shadow: none;
@@ -65,7 +65,7 @@
 }
 
 :root[data-color-scheme="light"] .build-detail-page .build-site-header {
-    background: linear-gradient(180deg, rgba(255, 253, 248, 0.9), rgba(255, 253, 248, 0.34));
+    background: var(--build-bg);
     border-bottom-color: rgba(57, 52, 45, 0.12);
 }
 

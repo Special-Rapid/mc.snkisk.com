@@ -145,3 +145,13 @@ componentのテキスト取得は15秒、初期待機とSkeletonのメディア�
 言語・テーマ・自動設定への復帰はページを再読み込みせず、原文、既存DOMノード、入力値、スクロールとフォーカスを保持します。端末言語は対応するexact/base localeを優先し、未対応なら日本語です。自動設定中だけ端末の変更を反映し、storage例外でも現在の画面に設定を適用します。
 
 `npm run check` はstrict型検査、生成、読み込み失敗・期限・復旧・URL・進捗・実DOMでの全6画面の言語往復を検査します。layout・メディア再生・keyboard導線はブラウザで別途検証します。型移行だけの `compare:runtime` は、この挙動改善branchの同一性検査には使いません。[内部改善Issue #9](https://github.com/Special-Rapid/mc.snkisk.com/issues/9) で型移行と分けてレビューします。
+
+## 狭幅ヘッダーとSurvivalの表示契約
+
+[Issue #18](https://github.com/Special-Rapid/mc.snkisk.com/issues/18) では、狭幅の共有ヘッダーをロゴと表示設定の2列にし、中間幅はナビゲーションを折り返します。狭幅・中間幅ではヘッダー全体を通常の高さ計算に含めてsticky表示にするため、文字拡大時もロゴと操作を重ねません。`--header-gap`、`--header-min-height`、`--header-brand-size` はこの共有配置のためのtokenです。
+
+Survivalの目次は折り返し、地形カードは画面内で1列以上に並ぶgridとします。全カードとリンクへ縦移動だけで到達でき、横送り操作は表示しません。既存のHTML・URL・文章・JS呼出先を保持します。`--survival-grid-gap` と `--survival-grid-card-min` が配置を決めます。見出し・本文・補足・panel・action・tagのsemantic tokenはlight／darkで組を切り替え、明るい背景にdark用の淡い本文だけが残る状態を避けます。
+
+対応言語は日本語／英語（いずれもLTR）、未対応localeのfallbackは日本語です。保存したmanual選択を優先し、保存がなければ端末localeのexact→base→fallbackで解決します。themeの自動設定はOS appearanceへ追従し、manual Light／Darkだけが追従を止めます。切替は既存DOMとcontextを保ち、reloadしません。これらは既存 `site-preferences` の契約を維持します。System accent連携など別の既存未達を、この配置・コントラスト修正の完了と同一視しません。
+
+共有ヘッダーのhover／keyboard focusは各テーマの文字色を使い、下線で操作可能性を示します。Homeの `--header-surface` とPVP／Buildの既存背景tokenで、背面に動画・写真があってもナビ文字のコントラストを保てるようにします。Licensesのdarkナビは本文用の固定青色を継承せず、darkの文字色を使います。これらはヘッダー内の可読性に限定し、本文の内容や画像は変更しません。Licensesは文字拡大時の長い英単語も折り返し、ヘッダー見出しには本文用の上下余白を持ち込みません。
