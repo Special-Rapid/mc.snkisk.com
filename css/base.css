@@ -7,6 +7,10 @@
 
 :root {
     color-scheme: light;
+    --header-surface: #f2f2f2;
+    --header-gap: 12px;
+    --header-min-height: 80px;
+    --header-brand-size: clamp(1rem, 3.3vw, 1.5rem);
     --font-display: "Pixelify Sans", sans-serif;
     --font-body: "Rajdhani", sans-serif;
     --font-ui: "Share Tech Mono", monospace;
@@ -47,6 +51,7 @@
 
 :root[data-color-scheme="dark"] {
     color-scheme: dark;
+    --header-surface: #0e141b;
 }
 
 /* 02 Reset And Base */
@@ -126,8 +131,8 @@ body {
 
 @media (max-width: 786px) {
     .site-header-actions {
-        position: absolute;
-        right: 14px;
+        position: static;
+        gap: var(--header-gap);
     }
 
     .site-preferences {
@@ -152,7 +157,6 @@ body {
 }
 
 :root[data-color-scheme="dark"] header {
-    background-color: rgba(14, 20, 27, 0.72);
     border-bottom-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -215,12 +219,13 @@ header {
     z-index: 998;
     height: 80px;
     width: 100%;
-    background-color: #f2f2f261;
+    background-color: var(--header-surface);
     backdrop-filter: blur(8px);
     border-bottom: 1.5px solid rgba(255, 255, 255, 0.2);
 }
 
-header .container {
+#site-header header .container {
+    padding-block: 0;
     height: 100%;
     display: flex;
     align-items: center;
@@ -237,6 +242,10 @@ header h1 {
     font-size: 24px;
     letter-spacing: 0.1em;
     margin-left: 20px;
+}
+
+#site-header header h1 {
+    margin-block: 0;
 }
 
 header ul {
@@ -259,44 +268,94 @@ header .site-header-actions > [data-header-nav]:not([hidden]) {
     display: flex;
 }
 
-header .container ul li:nth-child(1) a:hover {
-    color: #119100;
+header .container ul li a:hover,
+header .container ul li a:focus-visible {
+    color: inherit;
+    text-decoration: underline;
 }
 
-header .container ul li:nth-child(2) a:hover {
-    color: #ff0000;
-}
-
-header .container ul li:nth-child(3) a:hover {
-    color: #0066ff;
-}
-
-header .container ul li:nth-child(4) a:hover {
-    color: #9b2eff;
-}
-
-header .container ul li:nth-child(5) a:hover {
-    color: #c06c00;
+:root[data-color-scheme="dark"] .licenses-page header a {
+    color: inherit;
 }
 
 @media(max-width:786px) {
-    header .container {
+    #site-header {
+        position: sticky;
+        top: 0;
+        z-index: 998;
+        min-height: var(--header-min-height);
+    }
+
+    #site-header header {
         position: relative;
-        justify-content: center;
+        height: auto;
+        min-height: var(--header-min-height);
     }
 
-    header [data-header-brand] {
-        margin: 0 auto;
-        justify-content: center;
+    #site-header header .container {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--header-gap);
+        height: auto;
+        min-height: var(--header-min-height);
     }
 
-    header h1 {
-        margin: 0 0;
-        text-align: center;
+    #site-header header .container [data-header-brand] {
+        min-width: 0;
+        margin: 0;
+        justify-content: flex-start;
+    }
+
+    #site-header header .container [data-header-brand] h1 {
+        margin: 0;
+        font-size: var(--header-brand-size);
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: start;
     }
 
     header .site-header-actions > [data-header-nav]:not([hidden]) {
         display: none;
+    }
+}
+
+@media (min-width: 787px) and (max-width: 1080px) {
+    #site-header {
+        position: sticky;
+        top: 0;
+        z-index: 998;
+        min-height: var(--header-min-height);
+    }
+
+    #site-header header {
+        position: relative;
+        height: auto;
+        min-height: var(--header-min-height);
+    }
+
+    #site-header header .container {
+        height: auto;
+        min-height: var(--header-min-height);
+        flex-wrap: wrap;
+        gap: var(--header-gap);
+        padding-block: var(--header-gap);
+    }
+
+    #site-header [data-header-brand] {
+        min-width: 0;
+    }
+
+    header .site-header-actions {
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 100%;
+    }
+
+    header .site-header-actions > [data-header-nav] {
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        gap: var(--header-gap);
     }
 }
 

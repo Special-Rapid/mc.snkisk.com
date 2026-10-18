@@ -35,7 +35,7 @@
 /* 02 PVP Header And Footer Overrides */
 .pvp-detail-page header {
     top: 0;
-    background: rgba(7, 8, 13, 0.5);
+    background: var(--pvp-bg);
     border-bottom: 1px solid var(--pvp-border);
     box-shadow: rgba(255, 30, 46, 0.25) 0px 0px 24px;
 }
@@ -46,7 +46,7 @@
 
 .pvp-detail-page header h1 {
     font-family: var(--font-display);
-    color: var(--pvp-text-dim);
+    color: var(--pvp-text);
     letter-spacing: 0.04em;
     transition: color 0.2s;
 }
@@ -64,12 +64,14 @@
     text-transform: uppercase;
     padding: 6px 12px;
     border: 1px solid var(--pvp-border);
-    color: var(--pvp-text-dim);
+    color: var(--pvp-text);
     text-decoration: none;
     transition: all 0.2s;
 }
 
-.pvp-detail-page header .container ul li a:hover {
+.pvp-detail-page header .container ul li a:hover,
+.pvp-detail-page header .container ul li a:focus-visible {
+    color: var(--pvp-heading);
     border-color: var(--pvp-cyan-dim);
     box-shadow: var(--glow-cyan);
 }
