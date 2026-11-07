@@ -74,12 +74,23 @@ body.not-found-page {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto 1fr;
     align-items: center;
 }
 
+/* Reserve real space for enlarged settings instead of covering the 404 content. */
+body.not-found-page .site-preferences--standalone {
+    position: static;
+    grid-row: 1;
+    align-self: start;
+    margin: 18px;
+}
+
 body.not-found-page .container {
+    grid-row: 2;
+    justify-self: center;
     max-width: 600px;
     padding: 20px;
 }

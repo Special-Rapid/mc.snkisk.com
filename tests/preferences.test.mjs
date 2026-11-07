@@ -73,7 +73,14 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
 }
 const languageKey = 'minecraft-fan-site-language';
 const themeKey = 'minecraft-fan-site-theme';
-const toggleLanguage = ({ document }) => document.querySelector('[data-language-toggle]').click();
+function choose(ctx, preference, value) {
+    const select = ctx.document.querySelector(`[data-${preference}-select]`);
+    select.value = value;
+    select.dispatchEvent(new ctx.window.Event('change', { bubbles: true }));
+    return select;
+}
+const toggleLanguage = (ctx) => choose(ctx, 'language', ctx.window.SitePreferences.getState().language === 'ja' ? 'en' : 'ja');
+const toggleTheme = (ctx) => choose(ctx, 'theme', ctx.window.SitePreferences.getState().theme === 'dark' ? 'light' : 'dark');
 const state = ({ window }) => ({ ...window.SitePreferences.getState() });
 const assertNoReload = ({ errors }) => assert.deepEqual(errors, [], '再読み込み・navigation・未実装DOM処理を呼ばない');
 test('初回ENの遅延header/CTAが日本語へ戻り、同じリンク/Textノードを保持する', async () => {
@@ -107,7 +114,7 @@ test('本文JA→EN→JAで改行・装飾span・属性を復元し、Text/Eleme
     const ctx = await start();
     try {
         ctx.loadComponents();
-        const button = ctx.document.querySelector('[data-language-toggle]');
+        const button = ctx.document.querySelector('[data-language-select]');
         button.focus();
         toggleLanguage(ctx);
         assert.equal(ctx.hero.textContent, 'Turn imaginationinto blocks.');
@@ -172,16 +179,18 @@ test('storage全操作が例外でも言語・テーマを反映し、自動設�
         ctx.loadComponents();
         toggleLanguage(ctx);
         assert.equal(state(ctx).language, 'en');
-        ctx.document.querySelector('[data-theme-toggle]').click();
+        toggleTheme(ctx);
         assert.equal(state(ctx).theme, 'dark');
-        const auto = ctx.document.querySelector('[data-preferences-auto]');
-        auto.focus();
-        auto.click();
+        const theme = ctx.document.querySelector('[data-theme-select]');
+        theme.focus();
+        choose(ctx, 'theme', 'system');
+        assert.equal(state(ctx).language, 'en', 'theme System leaves language unchanged');
+        choose(ctx, 'language', 'system');
         assert.equal(state(ctx).language, 'ja');
         assert.equal(state(ctx).theme, 'light');
         assert.equal(state(ctx).themeSource, 'auto');
         assert.equal(state(ctx).languageSource, 'auto');
-        assert.equal(ctx.document.activeElement, ctx.document.querySelector('[data-theme-toggle]'));
+        assert.equal(ctx.document.activeElement, theme);
         assert.deepEqual(ctx.removals, [themeKey, languageKey]);
         assertNoReload(ctx);
     }
@@ -217,7 +226,7 @@ test('Systemは端末変更に追従し、手動選択中は追従せずmetadata
         assert.equal(ctx.document.querySelector('meta[name="color-scheme"]').content, 'dark');
         assert.ok(ctx.document.querySelector('meta[name="theme-color"]').content);
         toggleLanguage(ctx);
-        ctx.document.querySelector('[data-theme-toggle]').click();
+        toggleTheme(ctx);
         ctx.changeLanguages(['en-GB']);
         ctx.changeTheme(true);
         assert.equal(state(ctx).language, 'ja');
@@ -269,7 +278,7 @@ for (const language of ['ja', 'en']) {
             selection.removeAllRanges();
             selection.addRange(range);
             const selectedText = selection.toString();
-            ctx.document.querySelector('[data-theme-toggle]').click();
+            toggleTheme(ctx);
             ctx.window.SitePreferences.applyTextTranslations();
             assert.equal(selection.anchorNode, text);
             assert.equal(selection.anchorOffset, 1);
@@ -422,19 +431,21 @@ for (const page of ['home', 'survival', 'pvp', 'build', 'licenses']) {
             assert.equal(group.getAttribute('role'), 'group');
             assert.equal(state(ctx).language, 'en');
             assert.equal(state(ctx).theme, 'dark');
-            const language = group.querySelector('[data-language-toggle]');
-            const theme = group.querySelector('[data-theme-toggle]');
+            const language = group.querySelector('[data-language-select]');
+            const theme = group.querySelector('[data-theme-select]');
             language.focus();
-            language.click();
+            choose(ctx, 'language', 'ja');
             assert.equal(ctx.document.activeElement, language);
             assert.equal(ctx.store.get(languageKey), 'ja');
-            theme.click();
+            choose(ctx, 'theme', 'light');
             assert.equal(ctx.store.get(themeKey), 'light');
-            const auto = group.querySelector('[data-preferences-auto]');
-            assert.equal(auto.hidden, false);
-            auto.focus();
-            auto.click();
-            assert.equal(auto.hidden, true);
+            theme.focus();
+            choose(ctx, 'theme', 'system');
+            assert.equal(ctx.store.has(themeKey), false);
+            assert.equal(ctx.store.get(languageKey), 'ja');
+            assert.equal(state(ctx).languageSource, 'manual');
+            choose(ctx, 'language', 'system');
+            assert.equal(ctx.store.has(languageKey), false);
             assert.equal(ctx.document.activeElement, theme);
             assert.equal(state(ctx).languageSource, 'auto');
             assert.equal(state(ctx).themeSource, 'auto');
@@ -445,22 +456,32 @@ for (const page of ['home', 'survival', 'pvp', 'build', 'licenses']) {
         }
     });
 }
-test('hidden automatic controls stay out of layout until a manual preference exists', async () => {
+test('native selects expose their source, labels, options, and current values without a combined reset button', async () => {
     const ctx = await start();
     try {
-        ctx.loadComponents();
-        const style = ctx.document.createElement('style');
-        style.textContent = read('css/base.css');
-        ctx.document.head.appendChild(style);
-        const auto = ctx.document.querySelector('[data-preferences-auto]');
-        assert.equal(auto.hidden, true);
-        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'none');
-        const theme = ctx.document.querySelector('[data-theme-toggle]');
-        theme.click();
-        assert.equal(auto.hidden, false);
-        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'inline-flex');
-        auto.click();
-        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'none');
+        const { footer } = ctx.loadComponents();
+        const group = footer.querySelector('[data-site-preferences]');
+        assert.equal(group.querySelector('[data-preferences-auto]'), null);
+        const selects = [...group.querySelectorAll('select')];
+        assert.equal(selects.length, 2);
+        for (const select of selects) {
+            assert.equal(select.disabled, false);
+            assert.equal(select.value, 'system');
+            assert.equal(select.labels?.length, 1);
+        }
+        assert.deepEqual([...selects[0].options].map(o => o.value), ['system', 'light', 'dark']);
+        assert.deepEqual([...selects[1].options].map(o => o.value), ['system', 'ja', 'en']);
+        ctx.changeTheme(true);
+        ctx.changeLanguages(['en-US']);
+        assert.deepEqual(selects.map(select => select.value), ['system', 'system']);
+        assert.equal(group.querySelector('[data-theme-label]').textContent, 'Appearance');
+        assert.equal(group.querySelector('[data-language-label]').textContent, 'Language');
+        assert.equal(selects[0].options[0].textContent, 'System');
+        choose(ctx, 'theme', 'dark');
+        assert.equal(selects[0].value, 'dark');
+        assert.equal(selects[1].value, 'system');
+        assert.equal(ctx.store.get(themeKey), 'dark');
+        assert.equal(ctx.store.has(languageKey), false);
     }
     finally {
         ctx.dom.window.close();
@@ -489,11 +510,11 @@ for (const visible of [true, false]) {
             toggleLanguage(ctx);
             assert.equal(y, initialY);
             toggleLanguage(ctx);
-            const auto = group.querySelector('[data-preferences-auto]');
-            auto.focus();
-            auto.click();
+            const language = group.querySelector('[data-language-select]');
+            language.focus();
+            choose(ctx, 'language', 'system');
             assert.equal(y, initialY);
-            assert.equal(ctx.document.activeElement, group.querySelector('[data-theme-toggle]'));
+            assert.equal(ctx.document.activeElement, language);
             assertNoReload(ctx);
         }
         finally {
@@ -518,5 +539,112 @@ test('OS changes and programmatic preference reset preserve absolute scroll inst
     }
     finally {
         ctx.dom.window.close();
+    }
+});
+for (const preference of ['theme', 'language']) {
+    test(`${preference} System resets only its key and preserves the other manual field across OS changes`, async () => {
+        const ctx = await start({ saved: { [themeKey]: 'dark', [languageKey]: 'en' } });
+        try {
+            ctx.loadComponents();
+            const select = ctx.document.querySelector(`[data-${preference}-select]`);
+            const optionNodes = [...select.options];
+            select.focus();
+            choose(ctx, preference, 'system');
+            assert.equal(ctx.document.activeElement, select);
+            assert.deepEqual([...select.options], optionNodes);
+            assert.deepEqual(ctx.removals, [preference === 'theme' ? themeKey : languageKey]);
+            assert.equal(ctx.store.get(preference === 'theme' ? languageKey : themeKey), preference === 'theme' ? 'en' : 'dark');
+            ctx.changeTheme(true);
+            ctx.changeLanguages(['en-US']);
+            ctx.changeTheme(false);
+            ctx.changeLanguages(['ja-JP']);
+            assert.equal(state(ctx).theme, preference === 'theme' ? 'light' : 'dark');
+            assert.equal(state(ctx).language, preference === 'language' ? 'ja' : 'en');
+            assert.equal(select.value, 'system');
+            assertNoReload(ctx);
+        }
+        finally {
+            ctx.dom.window.close();
+        }
+    });
+}
+test('invalid native values and unrelated selects cannot mutate preferences or storage', async () => {
+    const ctx = await start();
+    try {
+        ctx.loadComponents();
+        const before = state(ctx);
+        choose(ctx, 'theme', 'untrusted');
+        choose(ctx, 'language', 'untrusted');
+        const outside = ctx.document.createElement('select');
+        outside.dataset.themeSelect = '';
+        outside.innerHTML = '<option value="dark">Dark</option>';
+        ctx.document.body.appendChild(outside);
+        outside.dispatchEvent(new ctx.window.Event('change', { bubbles: true }));
+        assert.deepEqual(state(ctx), before);
+        assert.equal(ctx.store.size, 0);
+        assertNoReload(ctx);
+    }
+    finally {
+        ctx.dom.window.close();
+    }
+});
+test('native selections retain legacy stored values on relaunch and independent System reset after removal failure', async () => {
+    const first = await start();
+    first.loadComponents();
+    choose(first, 'theme', 'dark');
+    choose(first, 'language', 'en');
+    const saved = Object.fromEntries(first.store);
+    first.dom.window.close();
+    const ctx = await start({ saved, removeThrows: true });
+    try {
+        ctx.loadComponents();
+        assert.equal(ctx.document.querySelector('[data-theme-select]').value, 'dark');
+        assert.equal(ctx.document.querySelector('[data-language-select]').value, 'en');
+        choose(ctx, 'language', 'system');
+        assert.equal(state(ctx).languageSource, 'auto');
+        assert.equal(state(ctx).language, 'ja');
+        assert.equal(state(ctx).themeSource, 'manual');
+        assert.equal(state(ctx).theme, 'dark');
+        assert.deepEqual(ctx.removals, [languageKey]);
+        assert.equal(ctx.store.get(languageKey), 'en', 'failure fixture retains persisted value but does not reapply it');
+        assertNoReload(ctx);
+    }
+    finally {
+        ctx.dom.window.close();
+    }
+});
+test('404 standalone shares the native selection contract and keeps focus on the selected field', async () => {
+    const ctx = await start({ page: '404', saved: { [themeKey]: 'dark' } });
+    try {
+        const group = ctx.document.querySelector('.site-preferences--standalone');
+        assert.equal(group.getAttribute('role'), 'group');
+        assert.equal(ctx.document.querySelector('footer'), null);
+        assert.equal(ctx.document.body.firstElementChild, group, 'reading order matches settings above the 404 content');
+        const theme = group.querySelector('[data-theme-select]');
+        assert.equal(theme.labels?.length, 1);
+        assert.equal(theme.value, 'dark');
+        theme.focus();
+        choose(ctx, 'theme', 'system');
+        assert.equal(ctx.document.activeElement, theme);
+        choose(ctx, 'language', 'en');
+        assert.equal(group.querySelector('[data-theme-label]').textContent, 'Appearance');
+        assert.equal(ctx.document.querySelectorAll('[data-site-preferences]').length, 1);
+        assertNoReload(ctx);
+    }
+    finally {
+        ctx.dom.window.close();
+    }
+});
+test('uninitialized footer native selects are disabled and settings precede named social links', () => {
+    const dom = new JSDOM(read('components/footer.html'));
+    try {
+        const toolbar = dom.window.document.querySelector('.footer-toolbar');
+        assert.equal(toolbar.firstElementChild?.hasAttribute('data-site-preferences'), true);
+        assert.equal(toolbar.lastElementChild?.className, 'footer-social');
+        assert.deepEqual([...toolbar.querySelectorAll('select')].map(select => select.disabled), [true, true]);
+        assert.deepEqual([...toolbar.querySelectorAll('.footer-social-link')].map(link => link.getAttribute('aria-label')), ['X: sinkaisoku_', 'GitHub: Special-Rapid']);
+    }
+    finally {
+        dom.window.close();
     }
 });

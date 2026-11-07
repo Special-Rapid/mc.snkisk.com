@@ -19,6 +19,11 @@
     const supportedThemes = new Set<unknown>(["light", "dark"]);
     const supportedLanguages = new Set<unknown>(["ja", "en"]);
 
+    const preferenceCopy = {
+        ja: { group: "表示設定", theme: "表示", language: "言語", system: "システム", light: "ライト", dark: "ダーク" },
+        en: { group: "Display preferences", theme: "Appearance", language: "Language", system: "System", light: "Light", dark: "Dark" },
+    };
+
     const textTranslations: Record<string, string> = {
         "再読み込み": "Reload",
         "© 2026 新快速(Special-Rapid)": "© 2026 Special-Rapid",
@@ -494,32 +499,25 @@
     }
 
     function updateControls(root?: ParentNode | null): void {
+        const copy = preferenceCopy[state.language];
         within((root || document) as Node, "[data-site-preferences]").forEach((controls) => {
-            controls.setAttribute("aria-label", state.language === "en" ? "Display preferences" : "表示設定");
-            const themeToggle = controls.querySelector("[data-theme-toggle]");
-            const languageToggle = controls.querySelector("[data-language-toggle]");
-            const themeLabel = controls.querySelector("[data-theme-label]");
-            const languageLabel = controls.querySelector("[data-language-label]");
-            const autoButton = controls.querySelector<HTMLElement>("[data-preferences-auto]");
-            const autoLabel = controls.querySelector("[data-auto-label]");
-            if (themeToggle) {
-                const next = state.theme === "dark" ? "light" : "dark";
-                themeToggle.setAttribute("aria-pressed", String(state.theme === "dark"));
-                themeToggle.setAttribute("aria-label", state.language === "en" ? `Switch to ${next} theme` : `${next === "light" ? "ライト" : "ダーク"}テーマに切り替え`);
+            controls.setAttribute("aria-label", copy.group);
+            setControlText(controls.querySelector("[data-theme-label]"), copy.theme);
+            setControlText(controls.querySelector("[data-language-label]"), copy.language);
+            controls.querySelectorAll<HTMLOptionElement>("[data-preference-copy]").forEach((option) => {
+                const key = option.dataset.preferenceCopy as keyof typeof copy;
+                if (Object.prototype.hasOwnProperty.call(copy, key)) setControlText(option, copy[key]);
+            });
+            const theme = controls.querySelector<HTMLSelectElement>("[data-theme-select]");
+            const language = controls.querySelector<HTMLSelectElement>("[data-language-select]");
+            if (theme) {
+                theme.value = state.themeSource === "auto" ? "system" : state.theme;
+                theme.disabled = false;
             }
-            if (languageToggle) {
-                languageToggle.setAttribute("aria-pressed", String(state.language === "en"));
-                languageToggle.setAttribute("aria-label", state.language === "en" ? "Switch to Japanese" : "Switch to English");
+            if (language) {
+                language.value = state.languageSource === "auto" ? "system" : state.language;
+                language.disabled = false;
             }
-            if (autoButton) {
-                const hadFocus = autoButton.contains(document.activeElement);
-                autoButton.hidden = state.themeSource === "auto" && state.languageSource === "auto";
-                autoButton.setAttribute("aria-label", state.language === "en" ? "Use device preferences" : "端末の設定に戻す");
-                if (hadFocus && autoButton.hidden && themeToggle instanceof HTMLElement) themeToggle.focus({ preventScroll: true });
-            }
-            setControlText(themeLabel, state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク"));
-            setControlText(languageLabel, state.language === "en" ? "JA" : "EN");
-            setControlText(autoLabel, state.language === "en" ? "Auto" : "自動");
         });
     }
 
@@ -578,6 +576,13 @@
     }
 
     function setTheme(theme: unknown, scrollAnchor?: Element): void {
+        if (theme === "system") {
+            removePreference(storageKeys.theme);
+            state.theme = systemTheme();
+            state.themeSource = "auto";
+            apply(scrollAnchor);
+            return;
+        }
         if (!supportedThemes.has(theme)) return;
         state.theme = theme as Theme;
         state.themeSource = "manual";
@@ -586,6 +591,13 @@
     }
 
     function setLanguage(language: unknown, scrollAnchor?: Element): void {
+        if (language === "system") {
+            removePreference(storageKeys.language);
+            state.language = systemLanguage();
+            state.languageSource = "auto";
+            apply(scrollAnchor);
+            return;
+        }
         if (!supportedLanguages.has(language)) return;
         state.language = language as Language;
         state.languageSource = "manual";
@@ -593,27 +605,22 @@
         apply(scrollAnchor);
     }
 
+    function removePreference(key: string): void {
+        try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
+    }
+
     function resetToAutomatic(scrollAnchor?: Element): void {
-        for (const key of Object.values(storageKeys)) {
-            try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
-        }
+        Object.values(storageKeys).forEach(removePreference);
         state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
         apply(scrollAnchor);
     }
 
-    document.addEventListener("click", (event) => {
-        if (!(event.target instanceof Element)) return;
-        const scrollAnchor = event.target.closest(".site-preferences--footer") || undefined;
-        const themeToggle = event.target.closest("[data-theme-toggle]");
-        if (themeToggle) {
-            setTheme(state.theme === "dark" ? "light" : "dark", scrollAnchor);
-            return;
-        }
-        if (event.target.closest("[data-language-toggle]")) {
-            setLanguage(state.language === "ja" ? "en" : "ja", scrollAnchor);
-            return;
-        }
-        if (event.target.closest("[data-preferences-auto]")) resetToAutomatic(scrollAnchor);
+    document.addEventListener("change", (event) => {
+        const select = event.target;
+        if (!(select instanceof HTMLSelectElement) || !select.closest("[data-site-preferences]")) return;
+        const scrollAnchor = select.closest(".site-preferences--footer") || undefined;
+        if (select.matches("[data-theme-select]")) setTheme(select.value, scrollAnchor);
+        else if (select.matches("[data-language-select]")) setLanguage(select.value, scrollAnchor);
     });
 
     if (window.matchMedia) {
@@ -639,8 +646,24 @@
             const controls = document.createElement("div");
             controls.className = "site-preferences site-preferences--standalone";
             controls.dataset.sitePreferences = "";
-            controls.innerHTML = '<button class="site-preferences__control" type="button" data-theme-toggle><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.5 15.3A8.5 8.5 0 0 1 8.7 3.5 8.5 8.5 0 1 0 20.5 15.3Z" /></svg><span class="site-preferences__text" data-theme-label></span></button><button class="site-preferences__control site-preferences__control--language" type="button" data-language-toggle><span data-language-label></span></button><button class="site-preferences__control site-preferences__control--auto" type="button" data-preferences-auto hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 5v4h4M4 13a8 8 0 0 0 14.9 4M20 19v-4h-4" /></svg><span class="site-preferences__text" data-auto-label></span></button>';
-            document.body.appendChild(controls);
+            controls.setAttribute("role", "group");
+            controls.innerHTML = `<label class="site-preferences__field">
+    <span data-theme-label></span>
+    <select class="site-preferences__control" data-theme-select disabled>
+        <option value="system" data-preference-copy="system"></option>
+        <option value="light" data-preference-copy="light"></option>
+        <option value="dark" data-preference-copy="dark"></option>
+    </select>
+</label>
+<label class="site-preferences__field">
+    <span data-language-label></span>
+    <select class="site-preferences__control" data-language-select disabled>
+        <option value="system" data-preference-copy="system"></option>
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+    </select>
+</label>`;
+            document.body.prepend(controls);
             updateControls(controls);
         }
     });

@@ -82,14 +82,10 @@
 }
 
 .pvp-detail-page footer p,
-.pvp-detail-page footer a {
+.pvp-detail-page footer a:not(.footer-social-link) {
     color: var(--pvp-text-dim) !important;
 }
 
-.pvp-detail-page .footer-social-link:hover,
-.pvp-detail-page .footer-social-link:focus-visible {
-    color: var(--pvp-heading) !important;
-}
 
 :root[data-color-scheme="light"] .pvp-detail-page {
     --pvp-bg: #eef1f7;
@@ -112,13 +108,6 @@
     box-shadow: rgba(189, 23, 49, 0.18) 0 0 24px;
 }
 
-:root[data-color-scheme="light"] .pvp-detail-page .site-preferences {
-    border-color: rgba(41, 51, 67, 0.2);
-}
-
-:root[data-color-scheme="light"] .pvp-detail-page .site-preferences__control {
-    color: var(--pvp-heading);
-}
 
 /* 03 PVP Detail Theme */
 .pvp-hero {

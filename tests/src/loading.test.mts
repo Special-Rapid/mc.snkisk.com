@@ -93,7 +93,7 @@ test('failed footer fetch restores exactly one complete preference group from th
   await window.SiteComponentInclude.loadIntoTarget(footer, 'components/footer.html');
   assert.equal(header.querySelector('[data-site-preferences]'), null);
   assert.equal(window.document.querySelectorAll('[data-site-preferences]').length, 1);
-  for (const selector of ['[data-theme-toggle]', '[data-language-toggle]', '[data-preferences-auto]']) {
+  for (const selector of ['[data-theme-select]', '[data-language-select]']) {
    assert.equal(footer.querySelectorAll(selector).length, 1);
   }
   assert.equal(footer.querySelector('[data-site-preferences]')!.getAttribute('role'), 'group');
