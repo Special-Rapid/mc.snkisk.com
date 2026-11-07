@@ -19,6 +19,11 @@
     const supportedThemes = new Set<unknown>(["light", "dark"]);
     const supportedLanguages = new Set<unknown>(["ja", "en"]);
 
+    const preferenceCopy = {
+        ja: { group: "表示設定", theme: "表示", language: "言語", system: "システム", light: "ライト", dark: "ダーク" },
+        en: { group: "Display preferences", theme: "Appearance", language: "Language", system: "System", light: "Light", dark: "Dark" },
+    };
+
     const textTranslations: Record<string, string> = {
         "再読み込み": "Reload",
         "© 2026 新快速(Special-Rapid)": "© 2026 Special-Rapid",
@@ -258,6 +263,7 @@
 
     // Apply before the stylesheet is parsed so the selected device/manual theme never flashes.
     document.documentElement.dataset.colorScheme = state.theme;
+    document.documentElement.dataset.themeSource = state.themeSource;
     document.documentElement.lang = state.language;
     document.documentElement.dir = "ltr";
     document.documentElement.style.colorScheme = state.theme;
@@ -494,32 +500,25 @@
     }
 
     function updateControls(root?: ParentNode | null): void {
+        const copy = preferenceCopy[state.language];
         within((root || document) as Node, "[data-site-preferences]").forEach((controls) => {
-            controls.setAttribute("aria-label", state.language === "en" ? "Display preferences" : "表示設定");
-            const themeToggle = controls.querySelector("[data-theme-toggle]");
-            const languageToggle = controls.querySelector("[data-language-toggle]");
-            const themeLabel = controls.querySelector("[data-theme-label]");
-            const languageLabel = controls.querySelector("[data-language-label]");
-            const autoButton = controls.querySelector<HTMLElement>("[data-preferences-auto]");
-            const autoLabel = controls.querySelector("[data-auto-label]");
-            if (themeToggle) {
-                const next = state.theme === "dark" ? "light" : "dark";
-                themeToggle.setAttribute("aria-pressed", String(state.theme === "dark"));
-                themeToggle.setAttribute("aria-label", state.language === "en" ? `Switch to ${next} theme` : `${next === "light" ? "ライト" : "ダーク"}テーマに切り替え`);
+            controls.setAttribute("aria-label", copy.group);
+            setControlText(controls.querySelector("[data-theme-label]"), copy.theme);
+            setControlText(controls.querySelector("[data-language-label]"), copy.language);
+            controls.querySelectorAll<HTMLOptionElement>("[data-preference-copy]").forEach((option) => {
+                const key = option.dataset.preferenceCopy as keyof typeof copy;
+                if (Object.prototype.hasOwnProperty.call(copy, key)) setControlText(option, copy[key]);
+            });
+            const theme = controls.querySelector<HTMLSelectElement>("[data-theme-select]");
+            const language = controls.querySelector<HTMLSelectElement>("[data-language-select]");
+            if (theme) {
+                theme.value = state.themeSource === "auto" ? "system" : state.theme;
+                theme.disabled = false;
             }
-            if (languageToggle) {
-                languageToggle.setAttribute("aria-pressed", String(state.language === "en"));
-                languageToggle.setAttribute("aria-label", state.language === "en" ? "Switch to Japanese" : "Switch to English");
+            if (language) {
+                language.value = (pendingLanguage?.source ?? state.languageSource) === "auto" ? "system" : (pendingLanguage?.value ?? state.language);
+                language.disabled = false;
             }
-            if (autoButton) {
-                const hadFocus = autoButton.contains(document.activeElement);
-                autoButton.hidden = state.themeSource === "auto" && state.languageSource === "auto";
-                autoButton.setAttribute("aria-label", state.language === "en" ? "Use device preferences" : "端末の設定に戻す");
-                if (hadFocus && autoButton.hidden && themeToggle instanceof HTMLElement) themeToggle.focus({ preventScroll: true });
-            }
-            setControlText(themeLabel, state.language === "en" ? (state.theme === "dark" ? "Light" : "Dark") : (state.theme === "dark" ? "ライト" : "ダーク"));
-            setControlText(languageLabel, state.language === "en" ? "JA" : "EN");
-            setControlText(autoLabel, state.language === "en" ? "Auto" : "自動");
         });
     }
 
@@ -555,96 +554,438 @@
         };
     }
 
-    function apply() {
+    interface LanguageRequest { value: Language; source: PreferenceSource; anchor?: Element }
+    let pendingLanguage: LanguageRequest | undefined;
+    let languageAnimations: Animation[] = [];
+    let languageGeneration = 0;
+    let languageTimer: number | undefined;
+    let languageEvents: AbortController | undefined;
+    let languageAnchor: { element: Element; top: number; x: number } | undefined;
+    let motionReady = false;
+    let composing = false;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const LANGUAGE_OUT_MS = 100;
+    const LANGUAGE_IN_MS = 220;
+    const textClear = { opacity: 1, filter: "blur(0px)" };
+    const textBlurred = { opacity: 0, filter: "blur(2px)" };
+
+    function inViewport(rect: DOMRect): boolean {
+        return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight &&
+            rect.right > 0 && rect.left < window.innerWidth;
+    }
+
+    function protectedMotionElement(element: Element): boolean {
+        const active = document.activeElement;
+        return ignored(element) || !!element.closest("[data-loading-overlay], .firstview") ||
+            !!element.querySelector("input, textarea, select, [contenteditable], [data-site-preferences]") ||
+            !!(active && active !== document.body && element.contains(active));
+    }
+
+    function canAnimatePreferences(): boolean {
+        const overlay = document.querySelector<HTMLElement>("[data-loading-overlay]");
+        const active = document.activeElement;
+        return !!document.body && motionReady && !composing && !reducedMotion?.matches && !document.hidden &&
+            typeof Element.prototype.animate === "function" && typeof window.requestAnimationFrame === "function" &&
+            !active?.matches("input, textarea, [contenteditable]:not([contenteditable='false'])") &&
+            (window.getSelection()?.isCollapsed ?? true) &&
+            (!overlay || getComputedStyle(overlay).display === "none") &&
+            !document.documentElement.matches(".home-reveal-pending, .home-reveal-running");
+    }
+
+    function languageTextTargets(language: Language): HTMLElement[] {
+        const targets = new Set<HTMLElement>();
+        const add = (element: Element | null): void => {
+            if (element instanceof HTMLElement && !protectedMotionElement(element) &&
+                !element.querySelector("img, video, svg, canvas") && inViewport(element.getBoundingClientRect()) &&
+                getComputedStyle(element).opacity === "1") targets.add(element);
+        };
+        const addOverride = (element: Element, translation: string): void => {
+            const record = overrides.get(element);
+            if (!record) return;
+            const desired = new Map(record.originals);
+            const segments = translation.split(/<br\s*\/?>(?:\s*)/i);
+            if (language === "en" && segments.length <= record.groups.length) {
+                record.groups.forEach((group, index) => {
+                    const first = group.find(text => record.originals.get(text)?.trim()) || group[0];
+                    for (const text of group) desired.set(text, text === first ? (segments[index] || "") : "");
+                });
+            }
+            if ([...desired].some(([text, value]) => text.data !== value)) add(element);
+        };
+        const translations = elementTranslations[viewName()];
+        if (translations) Object.entries(translations).forEach(([selector, translation]) =>
+            document.querySelectorAll(selector).forEach(element => addOverride(element, translation)));
+        const links = localizedConfigs[viewName()]?.links;
+        if (links) document.querySelectorAll("[data-header-nav] a[data-header-link-index]").forEach(element => {
+            const translation = links[Number(element.getAttribute("data-header-link-index"))];
+            if (translation) addOverride(element, translation);
+        });
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            if (!(node instanceof Text) || ignored(node.parentElement)) continue;
+            const source = originalText.get(node) ?? node.data;
+            const normalized = source.trim().replace(/\s+/g, " ");
+            if (!Object.prototype.hasOwnProperty.call(textTranslations, normalized)) continue;
+            const desired = language === "en"
+                ? `${source.match(/^\s*/)![0]}${textTranslations[normalized]}${source.match(/\s*$/)![0]}` : source;
+            if (node.data !== desired) add(node.parentElement);
+        }
+        // One effect per text region, never both an ancestor and its child.
+        return [...targets].filter(element => ![...targets].some(parent => parent !== element && parent.contains(element))).slice(0, 48);
+    }
+
+    function stopLanguageMotion(): void {
+        languageGeneration++;
+        if (languageTimer !== undefined) window.clearTimeout(languageTimer);
+        languageTimer = undefined;
+        languageEvents?.abort(); languageEvents = undefined;
+        for (const animation of languageAnimations) { try { animation.cancel(); } catch (_) { /* Settle even a failing animation backend. */ } }
+        languageAnimations = [];
+        languageAnchor = undefined;
+        pendingLanguage = undefined;
+        delete document.documentElement.dataset.preferenceLanguageMoving;
+    }
+
+    function finishLanguageMotion(keepAnchor = true): void {
+        const request = pendingLanguage;
+        const anchor = languageAnchor;
+        stopLanguageMotion();
+        if (request) {
+            state.language = request.value;
+            state.languageSource = request.source;
+            apply(keepAnchor ? request.anchor : undefined);
+        } else if (keepAnchor && anchor?.element.isConnected) {
+            const delta = anchor.element.getBoundingClientRect().top - anchor.top;
+            if (Math.abs(delta) > 0.5) window.scrollTo(anchor.x, window.scrollY + delta);
+        }
+    }
+
+    function watchLanguageInteraction(): void {
+        languageEvents = new AbortController();
+        const signal = languageEvents.signal;
+        const watchedScroll = { x: window.scrollX, y: window.scrollY };
+        const interrupt = () => finishLanguageMotion();
+        for (const name of ["wheel", "touchstart", "pointerdown", "keydown", "focusin"])
+            window.addEventListener(name, interrupt, { capture: true, passive: true, signal });
+        window.addEventListener("click", event => {
+            if (!(event.target instanceof Element) || !event.target.closest("[data-site-preferences]")) interrupt();
+        }, { capture: true, passive: true, signal });
+        window.addEventListener("scroll", () => {
+            // Scroll events can be queued after our preceding atomic apply.
+            // Only a new position represents navigation, not the event alone.
+            if (Math.abs(window.scrollY - watchedScroll.y) > 1 || Math.abs(window.scrollX - watchedScroll.x) > 1)
+                finishLanguageMotion(false);
+        }, { passive: true, signal });
+    }
+
+    function playLanguage(element: HTMLElement, frames: Keyframe[], duration: number, easing: string): void {
+        const animation = element.animate(frames, { duration, easing, fill: "both" });
+        // Cancellation rejects finished; no rejection may escape during rapid changes.
+        void animation.finished.catch(() => {});
+        languageAnimations.push(animation);
+    }
+
+    function commitLanguageWithMotion(text: HTMLElement[]): void {
+        const request = pendingLanguage;
+        if (!request) return;
+        if (!canAnimatePreferences()) { finishLanguageMotion(); return; }
+        const before = new Map(text.map(element => [element, { rect: element.getBoundingClientRect(), text: element.textContent }]));
+        const boxSelector = ".survival-card__body, .pvp-gear-card, .pvp-tip, .build-guide-steps > li, .build-crop-copy, .license-item, .survival-cta-inner, .not-found-page > .container";
+        // Footer controls sit at the document's scroll limit. Changing that limit
+        // every frame can trigger browser clamping, so keep their layout atomic.
+        const boxes = request.anchor ? [] : [...document.querySelectorAll<HTMLElement>(boxSelector)].filter(element =>
+            !protectedMotionElement(element) && !element.querySelector("img, video, canvas") && inViewport(element.getBoundingClientRect())).slice(0, 24);
+        const sizes = boxes.map(element => element.getBoundingClientRect());
+        const anchorBounds = request.anchor?.getBoundingClientRect();
+        const anchor = request.anchor && anchorBounds && inViewport(anchorBounds)
+            ? { element: request.anchor, top: anchorBounds.top, x: window.scrollX } : undefined;
+        stopLanguageMotion();
+        document.documentElement.dataset.preferenceLanguageMoving = "";
+        state.language = request.value; state.languageSource = request.source;
+        apply(request.anchor);
+        const generation = languageGeneration;
+        try {
+            // Batch natural-size reads before any animated dimensions are installed.
+            const newSizes = boxes.map(element => element.getBoundingClientRect());
+            boxes.forEach((element, index) => {
+                if (Math.abs(sizes[index].height - newSizes[index].height) > 0.5) {
+                    playLanguage(element, [
+                        { height: `${sizes[index].height}px`, overflow: "clip" },
+                        { height: `${newSizes[index].height}px`, overflow: "clip" },
+                    ], LANGUAGE_IN_MS, "ease-out");
+                }
+            });
+            if (anchor) languageAnchor = anchor;
+            const positions = text.map(element => element.getBoundingClientRect());
+            text.forEach((element, index) => {
+                const previous = before.get(element)!;
+                if (!element.isConnected || protectedMotionElement(element) || previous.text === element.textContent || !inViewport(positions[index])) return;
+                const dx = previous.rect.left - positions[index].left;
+                const dy = previous.rect.top - positions[index].top;
+                playLanguage(element, [
+                    { ...textBlurred, translate: `${dx}px ${dy}px` },
+                    { ...textBlurred, offset: 0.12 },
+                    { ...textClear, translate: "0px 0px" },
+                ], LANGUAGE_IN_MS, "ease-out");
+            });
+            watchLanguageInteraction();
+            languageTimer = window.setTimeout(() => { if (languageGeneration === generation) finishLanguageMotion(); }, LANGUAGE_IN_MS);
+        } catch (_) { finishLanguageMotion(); }
+    }
+
+    function requestLanguage(value: Language, source: PreferenceSource, anchor?: Element): void {
+        if (!pendingLanguage && languageAnchor) finishLanguageMotion();
+        else stopLanguageMotion();
+        pendingLanguage = { value, source, anchor };
+        updateControls();
+        if (value === state.language || !canAnimatePreferences()) { finishLanguageMotion(); return; }
+        const text = languageTextTargets(value);
+        if (!text.length) { finishLanguageMotion(); return; }
+        try {
+            text.forEach(element => playLanguage(element, [textClear, textBlurred], LANGUAGE_OUT_MS, "ease-in"));
+            watchLanguageInteraction();
+            const generation = languageGeneration;
+            languageTimer = window.setTimeout(() => { if (languageGeneration === generation) commitLanguageWithMotion(text); }, LANGUAGE_OUT_MS);
+        } catch (_) { finishLanguageMotion(); }
+    }
+
+    function apply(scrollAnchor?: Element) {
+        const anchorBounds = scrollAnchor?.getBoundingClientRect();
+        // A footer action must stay in view when translated content above it
+        // changes height. Other updates retain the existing absolute scroll.
+        const anchorTop = anchorBounds && anchorBounds.bottom > 0 &&
+            anchorBounds.top < window.innerHeight ? anchorBounds.top : undefined;
         const restoreSelection = preserveSelection();
         const scrollX = window.scrollX;
         const scrollY = window.scrollY;
         document.documentElement.dataset.colorScheme = state.theme;
+        document.documentElement.dataset.themeSource = state.themeSource;
         updateMetadata();
         applyTextTranslations();
         updateLocalizedAttributes();
         updateControls();
         restoreSelection();
-        if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
+        const targetY = anchorTop !== undefined && scrollAnchor?.isConnected
+            ? window.scrollY + scrollAnchor.getBoundingClientRect().top - anchorTop
+            : scrollY;
+        if (window.scrollX !== scrollX || window.scrollY !== targetY) window.scrollTo(scrollX, targetY);
         document.dispatchEvent(new CustomEvent("sitepreferenceschange", { detail: { ...state } }));
     }
 
-    function setTheme(theme: unknown): void {
-        if (!supportedThemes.has(theme)) return;
-        state.theme = theme as Theme;
-        state.themeSource = "manual";
-        save(storageKeys.theme, theme as Theme);
-        apply();
+    const THEME_MS = 280;
+    let themeAnimations: Animation[] = [];
+    let themeTimer: number | undefined;
+    let themeGeneration = 0;
+    type ColorFrame = { backgroundColor: string; color?: string; borderTopColor: string; borderRightColor: string; borderBottomColor: string; borderLeftColor: string };
+
+    function themePaintTargets(): HTMLElement[] {
+        if (!document.body) return [];
+        const targets: HTMLElement[] = [];
+        for (const element of [document.body, ...document.body.querySelectorAll<HTMLElement>("*")]) {
+            if (!(element instanceof HTMLElement) || element.matches("script, style, option, img, video, canvas")) continue;
+            if (inViewport(element.getBoundingClientRect())) targets.push(element);
+            if (targets.length === 160) break;
+        }
+        return targets;
     }
 
-    function setLanguage(language: unknown): void {
-        if (!supportedLanguages.has(language)) return;
-        state.language = language as Language;
-        state.languageSource = "manual";
-        save(storageKeys.language, language as Language);
-        apply();
+    function readColors(element: HTMLElement): ColorFrame {
+        const style = getComputedStyle(element);
+        const colors: ColorFrame = {
+            backgroundColor: style.backgroundColor,
+            borderTopColor: style.borderTopColor, borderRightColor: style.borderRightColor,
+            borderBottomColor: style.borderBottomColor, borderLeftColor: style.borderLeftColor,
+        };
+        // Pin colors on actual text painters, not every inheriting ancestor.
+        if ([...element.childNodes].some(node => node instanceof Text && node.data.trim())) colors.color = style.color;
+        return colors;
     }
 
-    document.addEventListener("click", (event) => {
-        if (!(event.target instanceof Element)) return;
-        const themeToggle = event.target.closest("[data-theme-toggle]");
-        if (themeToggle) {
-            setTheme(state.theme === "dark" ? "light" : "dark");
-            return;
+    function finishCssColors(elements: HTMLElement[]): void {
+        elements.forEach(element => element.getAnimations?.().forEach(animation => {
+            if ("transitionProperty" in animation && /color|background/.test(String(animation.transitionProperty))) {
+                try { animation.finish(); } catch (_) { animation.cancel(); }
+            }
+        }));
+    }
+
+    function finishThemeMotion(): void {
+        themeGeneration++;
+        if (themeTimer !== undefined) window.clearTimeout(themeTimer);
+        themeTimer = undefined;
+        const active = themeAnimations.length > 0;
+        for (const animation of themeAnimations) { try { animation.cancel(); } catch (_) { /* Best-effort cleanup. */ } }
+        themeAnimations = [];
+        delete document.documentElement.dataset.preferenceThemeMoving;
+        if (active) updateMetadata();
+    }
+
+    function applyThemeChange(update: () => void, scrollAnchor?: Element): void {
+        const interrupted = themeAnimations.length > 0;
+        finishThemeMotion();
+        finishLanguageMotion();
+        const animate = !interrupted && canAnimatePreferences();
+        const targets = themePaintTargets();
+        const before = animate ? targets.map(readColors) : [];
+        const oldTheme = state.theme;
+        update();
+        apply(scrollAnchor);
+        // Existing CSS color transitions must not become a delayed inherited target.
+        finishCssColors(targets);
+        updateMetadata();
+        if (!animate || oldTheme === state.theme) return;
+        const after = targets.map(readColors);
+        const generation = themeGeneration;
+        try {
+            targets.forEach((element, index) => {
+                if (element.closest("[data-site-preferences], .footer-social, input, textarea, button, [contenteditable]")) return;
+                const from: Keyframe = {}; const to: Keyframe = {};
+                // These page-specific footers have important foreground rules.
+                // Keep their readable text/surface pair atomic instead of tweening
+                // the background beneath an already-switched foreground.
+                const atomicFooterPaint = !!element.closest(".pvp-detail-page footer, .build-detail-page footer");
+                for (const property of Object.keys(after[index]) as Array<keyof ColorFrame>) {
+                    if (atomicFooterPaint && (property === "color" || property === "backgroundColor")) continue;
+                    if (before[index][property] !== after[index][property]) {
+                        from[property] = before[index][property]; to[property] = after[index][property];
+                    }
+                }
+                if (!Object.keys(from).length) return;
+                const animation = element.animate([from, to], { duration: THEME_MS, easing: "ease-in-out", fill: "both" });
+                void animation.finished.catch(() => {});
+                themeAnimations.push(animation);
+            });
+            // Controls switch as a readable pair; their labels need an opaque local
+            // surface while the surrounding page changes behind them.
+            document.querySelectorAll<HTMLElement>("[data-site-preferences]").forEach(group => {
+                if (!inViewport(group.getBoundingClientRect())) return;
+                const surface = getComputedStyle(group).getPropertyValue("--preferences-surface").trim();
+                const animation = group.animate([{ backgroundColor: surface }, { backgroundColor: surface }], { duration: THEME_MS, fill: "both" });
+                void animation.finished.catch(() => {}); themeAnimations.push(animation);
+            });
+            document.documentElement.dataset.preferenceThemeMoving = "";
+            themeTimer = window.setTimeout(() => { if (themeGeneration === generation) finishThemeMotion(); }, THEME_MS);
+        } catch (_) { finishThemeMotion(); }
+    }
+
+    function setTheme(theme: unknown, scrollAnchor?: Element): void {
+        if (theme !== "system" && !supportedThemes.has(theme)) return;
+        applyThemeChange(() => {
+            if (theme === "system") {
+                removePreference(storageKeys.theme); state.theme = systemTheme(); state.themeSource = "auto";
+            } else {
+                state.theme = theme as Theme; state.themeSource = "manual"; save(storageKeys.theme, state.theme);
+            }
+        }, scrollAnchor);
+    }
+
+    function setLanguage(language: unknown, scrollAnchor?: Element): void {
+        if (language !== "system" && !supportedLanguages.has(language)) return;
+        finishThemeMotion();
+        if (language === "system") {
+            removePreference(storageKeys.language);
+            requestLanguage(systemLanguage(), "auto", scrollAnchor);
+        } else if (supportedLanguages.has(language)) {
+            save(storageKeys.language, language as Language);
+            requestLanguage(language as Language, "manual", scrollAnchor);
         }
-        if (event.target.closest("[data-language-toggle]")) {
-            setLanguage(state.language === "ja" ? "en" : "ja");
-            return;
-        }
-        if (event.target.closest("[data-preferences-auto]")) window.SitePreferences.resetToAutomatic();
+    }
+
+    function removePreference(key: string): void {
+        try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
+    }
+
+    function resetToAutomatic(scrollAnchor?: Element): void {
+        stopLanguageMotion();
+        finishThemeMotion();
+        Object.values(storageKeys).forEach(removePreference);
+        state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
+        apply(scrollAnchor);
+    }
+
+    document.addEventListener("change", (event) => {
+        const select = event.target;
+        if (!(select instanceof HTMLSelectElement) || !select.closest("[data-site-preferences]")) return;
+        const scrollAnchor = select.closest(".site-preferences--footer") || undefined;
+        if (select.matches("[data-theme-select]")) setTheme(select.value, scrollAnchor);
+        else if (select.matches("[data-language-select]")) setLanguage(select.value, scrollAnchor);
     });
 
     if (window.matchMedia) {
         const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
         const updateAutomaticTheme = (event: MediaQueryListEvent) => {
             if (state.themeSource !== "auto") return;
-            state.theme = event.matches ? "dark" : "light";
-            apply();
+            applyThemeChange(() => { state.theme = event.matches ? "dark" : "light"; });
         };
         if (typeof systemTheme.addEventListener === "function") systemTheme.addEventListener("change", updateAutomaticTheme);
         else if (typeof systemTheme.addListener === "function") systemTheme.addListener(updateAutomaticTheme);
     }
 
     window.addEventListener("languagechange", () => {
-        if (state.languageSource !== "auto") return;
+        if ((pendingLanguage?.source ?? state.languageSource) !== "auto") return;
+        stopLanguageMotion();
+        finishThemeMotion();
+        state.languageSource = "auto";
         state.language = systemLanguage();
         apply();
     });
 
     document.addEventListener("DOMContentLoaded", () => {
         apply();
+        if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => window.requestAnimationFrame(() => { motionReady = true; }));
+        }
         if (!document.querySelector("[data-site-preferences]") && document.body.classList.contains("not-found-page")) {
             const controls = document.createElement("div");
             controls.className = "site-preferences site-preferences--standalone";
             controls.dataset.sitePreferences = "";
-            controls.innerHTML = '<button class="site-preferences__control" type="button" data-theme-toggle><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.5 15.3A8.5 8.5 0 0 1 8.7 3.5 8.5 8.5 0 1 0 20.5 15.3Z" /></svg><span class="site-preferences__text" data-theme-label></span></button><button class="site-preferences__control site-preferences__control--language" type="button" data-language-toggle><span data-language-label></span></button><button class="site-preferences__control site-preferences__control--auto" type="button" data-preferences-auto hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 5v4h4M4 13a8 8 0 0 0 14.9 4M20 19v-4h-4" /></svg><span class="site-preferences__text" data-auto-label></span></button>';
-            document.body.appendChild(controls);
+            controls.setAttribute("role", "group");
+            controls.innerHTML = `<label class="site-preferences__field">
+    <span data-theme-label></span>
+    <select class="site-preferences__control" data-theme-select disabled>
+        <option value="system" data-preference-copy="system"></option>
+        <option value="light" data-preference-copy="light"></option>
+        <option value="dark" data-preference-copy="dark"></option>
+    </select>
+</label>
+<label class="site-preferences__field">
+    <span data-language-label></span>
+    <select class="site-preferences__control" data-language-select disabled>
+        <option value="system" data-preference-copy="system"></option>
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+    </select>
+</label>`;
+            document.body.prepend(controls);
             updateControls(controls);
         }
     });
 
     document.addEventListener("sitepreferencescontentready", (event) => {
+        finishLanguageMotion();
+        finishThemeMotion();
         applyTextTranslations(event.detail && event.detail.target);
         updateLocalizedAttributes(event.detail?.target || document);
         updateControls(event.detail?.target);
     });
+
+    const settleLanguage = () => { finishLanguageMotion(false); finishThemeMotion(); };
+    for (const name of ["resize", "pagehide", "pageshow", "hashchange", "blur"])
+        window.addEventListener(name, settleLanguage);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) settleLanguage(); });
+    document.addEventListener("compositionstart", () => { composing = true; settleLanguage(); });
+    document.addEventListener("compositionend", () => { composing = false; });
+    document.addEventListener("selectionchange", () => {
+        if (!window.getSelection()?.isCollapsed) settleLanguage();
+    });
+    reducedMotion?.addEventListener?.("change", () => { if (reducedMotion.matches) settleLanguage(); });
 
     window.SitePreferences = {
         getState: () => ({ ...state }),
         translateText,
         localizeHeaderConfig,
         applyTextTranslations,
-        resetToAutomatic: () => {
-            for (const key of Object.values(storageKeys)) {
-                try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
-            }
-            state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
-            apply();
-        },
+        resetToAutomatic: () => resetToAutomatic(),
     };
 }());

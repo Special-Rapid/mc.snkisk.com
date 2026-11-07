@@ -10,6 +10,14 @@
     --header-surface: #f2f2f2;
     --header-gap: 12px;
     --header-min-height: 80px;
+    --preferences-target-size: 44px;
+    --preferences-spacing: 8px;
+    --preferences-radius: 8px;
+    --preferences-font-size: 0.875rem;
+    --preferences-surface: #ffffff;
+    --preferences-text: #333333;
+    --preferences-border: #777777;
+    --footer-toolbar-gap: 12px;
     --header-brand-size: clamp(1rem, 3.3vw, 1.5rem);
     --font-display: "Pixelify Sans", sans-serif;
     --font-body: "Rajdhani", sans-serif;
@@ -52,6 +60,9 @@
 :root[data-color-scheme="dark"] {
     color-scheme: dark;
     --header-surface: #0e141b;
+    --preferences-surface: #18212c;
+    --preferences-text: #f3f7fa;
+    --preferences-border: #8793a1;
 }
 
 /* 02 Reset And Base */
@@ -72,82 +83,59 @@ body {
 }
 
 .site-preferences {
-    display: inline-flex;
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: var(--preferences-spacing);
+    color: var(--preferences-text);
+    font: 700 var(--preferences-font-size)/1.4 var(--font-body);
+}
+
+.site-preferences__field {
+    display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border: 1px solid rgba(51, 51, 51, 0.18);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.42);
-    box-shadow: 0 6px 18px rgba(35, 41, 48, 0.06);
+    flex-wrap: wrap;
+    gap: var(--preferences-spacing);
+    min-width: 0;
 }
 
 .site-preferences__control {
-    min-width: 30px;
-    min-height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 5px 7px;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
-    color: inherit;
-    font: 700 10px/1 var(--font-ui);
-    letter-spacing: 0.08em;
+    min-width: var(--preferences-target-size);
+    min-height: var(--preferences-target-size);
+    max-width: 100%;
+    padding: var(--preferences-spacing);
+    border: 1px solid var(--preferences-border);
+    border-radius: var(--preferences-radius);
+    background: var(--preferences-surface);
+    color: var(--preferences-text);
+    font: inherit;
     cursor: pointer;
-    transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
-.site-preferences__control svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.8;
+.site-preferences__control:focus-visible,
+.footer-toolbar .footer-social-link:focus-visible {
+    outline: 3px solid currentColor;
+    outline-offset: 4px;
 }
 
-.site-preferences__control:hover {
-    transform: translateY(-1px);
-    background: rgba(51, 51, 51, 0.1);
-}
-
-.site-preferences__control:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
+.site-preferences__control:disabled {
+    cursor: default;
+    opacity: 0.65;
 }
 
 .site-preferences--standalone {
     position: fixed;
     top: 18px;
     right: 18px;
+    left: 18px;
+    justify-content: flex-end;
     z-index: 10;
-    padding-left: 0;
-    border-left: 0;
 }
 
 @media (max-width: 786px) {
     .site-header-actions {
         position: static;
         gap: var(--header-gap);
-    }
-
-    .site-preferences {
-        padding-left: 0;
-        border-left: 0;
-    }
-
-    .site-preferences__control {
-        min-width: 32px;
-        min-height: 30px;
-        padding: 6px 8px;
-    }
-
-    .site-preferences__text {
-        display: none;
     }
 }
 
@@ -160,26 +148,11 @@ body {
     border-bottom-color: rgba(255, 255, 255, 0.18);
 }
 
-:root[data-color-scheme="dark"] .site-preferences {
-    border-color: rgba(255, 255, 255, 0.2);
-    background: rgba(9, 14, 20, 0.58);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-}
-
-:root[data-color-scheme="dark"] .site-preferences__control {
-    color: #f3f7fa;
-}
-
-:root[data-color-scheme="dark"] .site-preferences__control:hover {
-    background: rgba(255, 255, 255, 0.12);
-}
-
 :root[data-color-scheme="dark"] footer {
     background-color: #171e27;
 }
 
-:root[data-color-scheme="dark"] footer p,
-:root[data-color-scheme="dark"] .footer-social-link {
+:root[data-color-scheme="dark"] footer p {
     color: #bfc8d3;
 }
 
@@ -390,56 +363,87 @@ footer a {
     transition: 0.2s;
 }
 
+/* Settings and creator links share one responsive action row. */
+.footer-toolbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--footer-toolbar-gap);
+    width: min(100% - 32px, 960px);
+    margin-top: var(--preferences-spacing);
+}
+
+.site-preferences--footer {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .footer-social {
     display: flex;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
     align-items: center;
-    justify-content: center;
-    gap: 10px 18px;
-    width: 100%;
-    margin-top: 6px;
+    gap: var(--preferences-spacing);
 }
 
 .footer-social-link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    color: #666666;
-    font-size: 13px;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    gap: var(--preferences-spacing);
+    min-width: var(--preferences-target-size);
+    min-height: var(--preferences-target-size);
+    padding: var(--preferences-spacing);
+    border: 1px solid var(--preferences-border);
+    border-radius: var(--preferences-radius);
+    background: var(--preferences-surface);
+    color: var(--preferences-text);
+    font: 700 var(--preferences-font-size)/1.4 var(--font-body);
     text-decoration: none;
-    opacity: 0.82;
 }
 
 .footer-social-link svg {
     display: block;
-    width: 16px;
-    height: 16px;
-    flex: 0 0 16px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
     fill: currentColor;
 }
 
-.footer-social-link:hover,
-.footer-social-link:focus-visible {
-    color: #3a3a3a;
-    opacity: 1;
-}
-
-.footer-social-link:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 4px;
-    border-radius: 999px;
-}
-
-@media (max-width: 520px) {
-    .footer-social {
-        gap: 10px 14px;
+@media (max-width: 700px) {
+    .site-preferences--footer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr));
     }
 
-    .footer-social-link {
-        font-size: 12px;
+    .site-preferences--footer .site-preferences__field {
+        flex: 1 1 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+    }
+
+    .footer-social-link span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+/* At unusually enlarged text sizes the fields may reflow within the left side. */
+@media (max-width: 360px) {
+    .footer-toolbar {
+        gap: var(--preferences-spacing);
+    }
+
+    .site-preferences--footer {
+        gap: 4px;
+    }
+
+    .site-preferences--footer .site-preferences__control {
+        padding-inline: 4px;
     }
 }
 
@@ -548,4 +552,29 @@ footer a {
     margin-top: 8px;
     font-size: 14px;
     line-height: 1.4;
+}
+
+/* Preference motion owns only this short-lived anchoring guard, not global transitions. */
+html[data-preference-language-moving] {
+    overflow-anchor: none;
+}
+
+/* Tint the live system canvas with its accent while retaining readable system text. */
+@supports (color: AccentColor) and (color: CanvasText) and (background-color: color-mix(in srgb, AccentColor 30%, Canvas)) {
+    :root[data-theme-source="auto"] {
+        --system-selection-surface: color-mix(in srgb, AccentColor 30%, Canvas);
+        --system-selection-text: CanvasText;
+    }
+
+    :root[data-theme-source="auto"] ::selection {
+        background-color: var(--system-selection-surface);
+        color: var(--system-selection-text);
+        text-shadow: none;
+    }
+
+    :root[data-theme-source="auto"] ::-moz-selection {
+        background-color: var(--system-selection-surface);
+        color: var(--system-selection-text);
+        text-shadow: none;
+    }
 }

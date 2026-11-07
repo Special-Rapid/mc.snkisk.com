@@ -388,3 +388,144 @@
         text-shadow: 1px 1px 3px #000000;
     }
 }
+
+/* The home header lets the scene through without fading its text or focus. */
+:root[data-view-theme="home"] {
+    --header-surface: rgba(242, 242, 242, 0.72);
+}
+
+:root[data-view-theme="home"][data-color-scheme="dark"] {
+    --header-surface: rgba(14, 20, 27, 0.76);
+}
+
+/* Home keeps the same video-backed header on narrow screens as on desktop.
+   The wrapper has no flow height because its actual header is fixed. */
+@media (max-width: 1080px) {
+    :root[data-view-theme="home"] #site-header {
+        position: static;
+        min-height: 0;
+    }
+
+    :root[data-view-theme="home"] #site-header header {
+        position: fixed;
+        top: 0;
+    }
+}
+
+/* Home entrance: video alone, then a soft left-to-right title reveal.
+   Classes are added only by the loader, so no-JS pages keep their content. */
+html.home-reveal-pending,
+html.home-reveal-running {
+    scrollbar-gutter: stable;
+}
+
+html.home-reveal-pending,
+html.home-reveal-running,
+.home-reveal-pending body,
+.home-reveal-running body {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pinch-zoom;
+}
+
+.home-reveal-pending #site-header,
+.home-reveal-pending .firstview-text-container {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.home-reveal-pending .firstview .gradation::before {
+    opacity: 0;
+}
+
+.home-reveal-pending .firstview .rotating-item {
+    animation-play-state: paused;
+}
+
+.home-reveal-running #site-header header,
+.home-reveal-running .firstview .gradation::before {
+    animation: home-ui-reveal 1.5s ease both;
+}
+
+.home-reveal-running .firstview .gradation::before {
+    z-index: 1;
+    pointer-events: none;
+}
+
+.home-reveal-running .firstview-text-container {
+    animation: home-title-reveal 1.5s ease both;
+    -webkit-mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    -webkit-mask-size: 300% 100%;
+    mask-size: 300% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+/* Preserve the sticky header's layout space and the final video framing.
+   During the intro only, slide the backdrop over that space. Page scrolling
+   waits for the reveal; explicit navigation and accessibility escapes release it. */
+.home-reveal-pending .firstview,
+.home-reveal-running .firstview,
+.home-reveal-pending .firstview > .skeleton-media,
+.home-reveal-running .firstview > .skeleton-media {
+    overflow: visible;
+}
+
+.home-reveal-pending .firstview video {
+    transform: translateY(calc(-1 * var(--home-intro-header-space, 0px)));
+}
+
+.home-reveal-running .firstview video {
+    animation: home-media-return 1.5s ease both;
+}
+
+@keyframes home-media-return {
+    from { transform: translateY(calc(-1 * var(--home-intro-header-space, 0px))); }
+    to { transform: translateY(0); }
+}
+
+@keyframes home-ui-reveal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes home-title-reveal {
+    from { opacity: 0; -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+    to { opacity: 1; -webkit-mask-position: 0 0; mask-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.home-reveal-pending,
+    html.home-reveal-running,
+    .home-reveal-pending body,
+    .home-reveal-running body {
+        overflow: revert;
+        overscroll-behavior: revert;
+        touch-action: auto;
+    }
+    .home-reveal-pending #site-header,
+    .home-reveal-pending .firstview-text-container {
+        visibility: visible;
+        pointer-events: auto;
+    }
+    .home-reveal-pending .firstview .gradation::before { opacity: 1; }
+    .home-reveal-pending .firstview,
+    .home-reveal-running .firstview { overflow: hidden; }
+    .home-reveal-pending .firstview > .skeleton-media,
+    .home-reveal-running .firstview > .skeleton-media {
+        overflow: hidden;
+    }
+    .home-reveal-pending .firstview video,
+    .home-reveal-running .firstview video {
+        transform: none;
+        animation: none;
+    }
+    .home-reveal-running #site-header header,
+    .home-reveal-running .firstview .gradation::before,
+    .home-reveal-running .firstview-text-container {
+        animation: none;
+        -webkit-mask-image: none;
+        mask-image: none;
+    }
+}

@@ -14,24 +14,130 @@
         return;
     }
 
+    // Decorative home-only reveal starts after the overlay is actually gone.
+    // Keep the existing tracker, buffer requirements and include waits untouched.
+    const root = document.documentElement;
+    const hasHomeHero = root.dataset.viewTheme === "home" &&
+        Boolean(document.querySelector(".firstview-text-container"));
+    let revealTimer = 0;
+    let cleanupTimer = 0;
+    let overlayHideStarted = false;
+    let overlayHidden = false;
+    let headerObserver: ResizeObserver | undefined;
+    let introEvents: AbortController | undefined;
+    let isHomeRevealFinished = false;
+
+    function finishHomeReveal() {
+        if (isHomeRevealFinished) return;
+        isHomeRevealFinished = true;
+        introEvents?.abort();
+        window.clearTimeout(revealTimer);
+        window.clearTimeout(cleanupTimer);
+        root.classList.remove("home-reveal-pending", "home-reveal-running");
+        root.style.removeProperty("--home-intro-header-space");
+        headerObserver?.disconnect();
+    }
+
+    if (hasHomeHero && !prefersReducedMotion) {
+        introEvents = new AbortController();
+        const listenerOptions = { signal: introEvents.signal };
+        root.classList.add("home-reveal-pending");
+        const header = document.getElementById("site-header");
+        let headerSpace = 0;
+        const measureHeader = () => {
+            if (!root.classList.contains("home-reveal-pending") &&
+                !root.classList.contains("home-reveal-running")) return;
+            const height = header?.getBoundingClientRect().height || 0;
+            // Avoid changing the framing under an already visible animation.
+            if (overlayHidden && Math.abs(height - headerSpace) > 0.5) {
+                finishHomeReveal();
+                return;
+            }
+            headerSpace = height;
+            root.style.setProperty("--home-intro-header-space", `${height}px`);
+        };
+        measureHeader();
+        if (header && window.ResizeObserver) {
+            headerObserver = new ResizeObserver(measureHeader);
+            headerObserver.observe(header);
+        }
+        document.addEventListener("sitepreferencescontentready", measureHeader, listenerOptions);
+        window.addEventListener("resize", finishHomeReveal, listenerOptions);
+        const interactiveTarget = (target: EventTarget | null) => target instanceof Element &&
+            target.closest("a[href], button, input, select, textarea, summary, [role='button'], [contenteditable]:not([contenteditable='false'])");
+        // A touch/scrollbar press is a scroll intention, not an intro skip.
+        // Actual controls and keyboard/assistive focus still release decoration.
+        window.addEventListener("pointerdown", (event) => {
+            if (interactiveTarget(event.target)) finishHomeReveal();
+        }, { ...listenerOptions, capture: true });
+        document.addEventListener("focusin", finishHomeReveal, listenerOptions);
+        window.addEventListener("wheel", (event) => {
+            if (!event.ctrlKey && !event.metaKey) event.preventDefault();
+        }, { ...listenerOptions, passive: false });
+        window.addEventListener("touchmove", (event) => {
+            if (event.touches.length === 1) event.preventDefault();
+        }, { ...listenerOptions, passive: false });
+        const scrollKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"]);
+        window.addEventListener("keydown", (event) => {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (scrollKeys.has(event.key) && !interactiveTarget(event.target)) {
+                event.preventDefault();
+                return;
+            }
+            finishHomeReveal();
+        }, listenerOptions);
+        window.addEventListener("hashchange", finishHomeReveal, listenerOptions);
+        window.addEventListener("pagehide", finishHomeReveal, listenerOptions);
+        // Restored pages must never inherit an intro or its scrolling lock.
+        window.addEventListener("pageshow", (event) => {
+            if (event.persisted) finishHomeReveal();
+        }, listenerOptions);
+        window.matchMedia?.("(prefers-reduced-motion: reduce)")
+            .addEventListener?.("change", (event) => {
+                if (event.matches) finishHomeReveal();
+            }, listenerOptions);
+        if (window.scrollY > 0 || window.location.hash) finishHomeReveal();
+    }
+
+    function didHideOverlay() {
+        if (overlayHidden) return;
+        overlayHidden = true;
+        overlay.dataset.loadingOverlayHidden = "true";
+        window.dispatchEvent(new CustomEvent("site:loading-overlay-hidden"));
+        if (!root.classList.contains("home-reveal-pending")) return;
+        revealTimer = window.setTimeout(() => {
+            root.classList.replace("home-reveal-pending", "home-reveal-running");
+            cleanupTimer = window.setTimeout(finishHomeReveal, 1500);
+        }, 1300);
+    }
+
     function hideOverlayWithFallback(onHide?: () => void) {
+        if (overlayHideStarted) return;
+        overlayHideStarted = true;
+        let fallbackTimer = 0;
+        const complete = () => {
+            window.clearTimeout(fallbackTimer);
+            didHideOverlay();
+            onHide?.();
+        };
         if (prefersReducedMotion) {
             overlay.style.display = "none";
-            if (typeof onHide === "function") {
-                onHide();
-            }
+            complete();
             return;
         }
 
         if (window.jQuery) {
-            window.jQuery(overlay).delay(80).fadeOut(650, onHide!);
+            // A stopped animation must not leave the home UI permanently hidden.
+            fallbackTimer = window.setTimeout(() => {
+                overlay.style.display = "none";
+                complete();
+            }, 1500);
+            window.jQuery(overlay).delay(80).fadeOut(650, complete);
             return;
         }
 
         overlay.style.display = "none";
-        if (typeof onHide === "function") {
-            onHide();
-        }
+        complete();
     }
 
     function createBarController() {

@@ -76,13 +76,6 @@
     text-shadow: none;
 }
 
-:root[data-color-scheme="light"] .build-detail-page .site-preferences {
-    border-color: rgba(57, 52, 45, 0.2);
-}
-
-:root[data-color-scheme="light"] .build-detail-page .site-preferences__control {
-    color: #302c26;
-}
 
 .build-detail-page .build-site-header .container {
     max-width: 1380px;
@@ -588,14 +581,10 @@
 }
 
 .build-detail-page footer p,
-.build-detail-page footer a {
-    color: rgba(255, 255, 255, 0.48) !important;
+.build-detail-page footer a:not(.footer-social-link) {
+    color: var(--build-text-dim) !important;
 }
 
-.build-detail-page .footer-social-link:hover,
-.build-detail-page .footer-social-link:focus-visible {
-    color: rgba(255, 255, 255, 0.82) !important;
-}
 
 .build-detail-page [data-loading-overlay] {
     background: #020406;
