@@ -414,6 +414,20 @@
 
 /* Home entrance: video alone, then a soft left-to-right title reveal.
    Classes are added only by the loader, so no-JS pages keep their content. */
+html.home-reveal-pending,
+html.home-reveal-running {
+    scrollbar-gutter: stable;
+}
+
+html.home-reveal-pending,
+html.home-reveal-running,
+.home-reveal-pending body,
+.home-reveal-running body {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pinch-zoom;
+}
+
 .home-reveal-pending #site-header,
 .home-reveal-pending .firstview-text-container {
     visibility: hidden;
@@ -449,8 +463,8 @@
 }
 
 /* Preserve the sticky header's layout space and the final video framing.
-   During the intro only, slide the backdrop over that space; scrolling or
-   interaction skips the motion before the below-fold edge can be exposed. */
+   During the intro only, slide the backdrop over that space. Page scrolling
+   waits for the reveal; explicit navigation and accessibility escapes release it. */
 .home-reveal-pending .firstview,
 .home-reveal-running .firstview,
 .home-reveal-pending .firstview > .skeleton-media,
@@ -482,6 +496,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    html.home-reveal-pending,
+    html.home-reveal-running,
+    .home-reveal-pending body,
+    .home-reveal-running body {
+        overflow: revert;
+        overscroll-behavior: revert;
+        touch-action: auto;
+    }
     .home-reveal-pending #site-header,
     .home-reveal-pending .firstview-text-container {
         visibility: visible;

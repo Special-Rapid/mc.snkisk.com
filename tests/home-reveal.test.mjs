@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 const source = readFileSync('js/loading-overlay.js', 'utf8');
-function fixture({ home = true, reduced = false, jquery = true, overlay = true, headerHeight = 0, scrollY = 0, hash = '' } = {}) {
+function fixture({ home = true, reduced = false, jquery = true, overlay = true, headerHeight = 0, scrollY = 0, hash = '', inlineStyles = false } = {}) {
     const dom = new JSDOM(`<html data-view-theme="${home ? 'home' : 'survival'}"><body>
         ${overlay ? '<div data-loading-overlay></div>' : ''}
         <div id="site-header"></div><div class="firstview-text-container">Minecraft</div>
         </body></html>`, { runScripts: 'outside-only', url: `https://mc.snkisk.com/${hash}` });
     const browser = dom.window;
     const root = browser.document.documentElement;
+    if (inlineStyles) {
+        root.style.cssText = "color: red; scroll-behavior: smooth";
+        browser.document.body.style.cssText = "background-color: blue; overflow-x: clip";
+    }
     Object.defineProperty(browser, 'scrollY', { value: scrollY, configurable: true });
     const header = browser.document.getElementById('site-header');
     header.getBoundingClientRect = () => ({ height: headerHeight });
@@ -25,7 +29,7 @@ function fixture({ home = true, reduced = false, jquery = true, overlay = true, 
     const frames = [];
     const motion = new dom.window.EventTarget();
     const introRegistrations = [];
-    const introTypes = new Set(['sitepreferencescontentready', 'resize', 'pointerdown', 'scroll', 'keydown', 'pageshow', 'change']);
+    const introTypes = new Set(['sitepreferencescontentready', 'resize', 'pointerdown', 'wheel', 'touchmove', 'keydown', 'focusin', 'hashchange', 'pagehide', 'pageshow', 'change']);
     for (const target of [browser, browser.document, motion]) {
         const add = target.addEventListener.bind(target);
         target.addEventListener = (type, listener, options) => {
@@ -115,7 +119,7 @@ test('the stopped-fade safety timer begins only after load completion and remove
     f.close();
 });
 for (const phase of ['before-load', 'video-only', 'revealing']) {
-    for (const action of ['keyboard', 'restored-page', 'reduced-motion', 'pointer', 'resize', 'scroll']) {
+    for (const action of ['keyboard', 'escape', 'restored-page', 'reduced-motion', 'control', 'focus', 'resize', 'pagehide', 'hashchange']) {
         test(`${action} bypasses decoration during ${phase}`, () => {
             const f = fixture();
             if (phase !== 'before-load') {
@@ -130,17 +134,23 @@ for (const phase of ['before-load', 'video-only', 'revealing']) {
                 f.browser.dispatchEvent(new f.dom.window.PageTransitionEvent('pageshow', { persisted: true }));
             if (action === 'reduced-motion')
                 f.reduceMotion();
-            if (action === 'pointer')
-                f.browser.dispatchEvent(new f.dom.window.Event('pointerdown'));
+            if (action === 'escape')
+                f.browser.dispatchEvent(new f.dom.window.KeyboardEvent('keydown', { key: 'Escape' }));
+            if (action === 'control' || action === 'focus') {
+                const button = f.browser.document.createElement('button');
+                f.browser.document.body.append(button);
+                if (action === 'focus')
+                    button.focus();
+                else
+                    button.dispatchEvent(new f.dom.window.Event('pointerdown', { bubbles: true }));
+            }
+            if (action === 'pagehide' || action === 'hashchange')
+                f.browser.dispatchEvent(new f.dom.window.Event(action));
             if (action === 'resize')
                 f.browser.dispatchEvent(new f.dom.window.Event('resize'));
-            if (action === 'scroll') {
-                Object.defineProperty(f.browser, 'scrollY', { value: 100 });
-                f.browser.dispatchEvent(new f.dom.window.Event('scroll'));
-            }
             assert.equal(f.root.className, '');
             assert.equal(f.timers.size, 0);
-            assert.equal(f.introRegistrations.length, 7);
+            assert.equal(f.introRegistrations.length, 11);
             assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
             if (phase === 'before-load') {
                 f.complete();
@@ -205,7 +215,7 @@ test('restored scroll positions and fragment destinations skip the decorative in
         f.fade();
         assert.equal(f.root.className, '');
         assert.equal(f.timers.size, 0);
-        assert.equal(f.introRegistrations.length, 7);
+        assert.equal(f.introRegistrations.length, 11);
         assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
         f.close();
     }
@@ -216,7 +226,7 @@ test('normal completion releases every intro listener and later scroll does no c
     f.fade();
     f.runTimer(1300);
     f.runTimer(1500);
-    assert.equal(f.introRegistrations.length, 7);
+    assert.equal(f.introRegistrations.length, 11);
     assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
     const disconnects = f.observerDisconnects();
     Object.defineProperty(f.browser, 'scrollY', { value: 500 });
@@ -226,4 +236,104 @@ test('normal completion releases every intro listener and later scroll does no c
     assert.equal(f.observerDisconnects(), disconnects);
     assert.equal(f.timers.size, 0);
     f.close();
+});
+for (const phase of ['before-load', 'video-only', 'revealing']) {
+    test(`page-scroll intentions do not finish the intro during ${phase}`, () => {
+        const f = fixture();
+        if (phase !== 'before-load') {
+            f.complete();
+            f.fade();
+        }
+        if (phase === 'revealing')
+            f.runTimer(1300);
+        const beforeClass = f.root.className;
+        const beforeTimers = [...f.timers.keys()];
+        f.browser.document.body.dispatchEvent(new f.dom.window.Event('pointerdown', { bubbles: true }));
+        f.browser.dispatchEvent(new f.dom.window.Event('scroll'));
+        const wheel = new f.dom.window.WheelEvent('wheel', { deltaY: 200, cancelable: true });
+        f.browser.dispatchEvent(wheel);
+        assert.equal(wheel.defaultPrevented, true);
+        const touch = Object.assign(new f.dom.window.Event('touchmove', { cancelable: true }), { touches: [{}] });
+        f.browser.dispatchEvent(touch);
+        assert.equal(touch.defaultPrevented, true);
+        for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar']) {
+            const event = new f.dom.window.KeyboardEvent('keydown', { key, cancelable: true });
+            f.browser.dispatchEvent(event);
+            assert.equal(event.defaultPrevented, true, key);
+        }
+        assert.equal(f.root.className, beforeClass);
+        assert.deepEqual([...f.timers.keys()], beforeTimers);
+        if (phase === 'before-load') {
+            f.complete();
+            f.fade();
+        }
+        if (phase !== 'revealing')
+            f.runTimer(1300);
+        f.runTimer(1500);
+        assert.equal(f.root.className, '');
+        for (const event of [
+            new f.dom.window.WheelEvent('wheel', { deltaY: 200, cancelable: true }),
+            Object.assign(new f.dom.window.Event('touchmove', { cancelable: true }), { touches: [{}] }),
+            new f.dom.window.KeyboardEvent('keydown', { key: 'PageDown', cancelable: true }),
+        ]) {
+            f.browser.dispatchEvent(event);
+            assert.equal(event.defaultPrevented, false);
+        }
+        assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
+        f.close();
+    });
+}
+test('pinch zoom and modified shortcuts are not prevented or treated as intro skips', () => {
+    const f = fixture();
+    f.complete();
+    f.fade();
+    const events = [
+        Object.assign(new f.dom.window.Event('touchmove', { cancelable: true }), { touches: [{}, {}] }),
+        new f.dom.window.WheelEvent('wheel', { ctrlKey: true, deltaY: 100, cancelable: true }),
+        new f.dom.window.WheelEvent('wheel', { metaKey: true, deltaY: 100, cancelable: true }),
+        ...['ctrlKey', 'metaKey', 'altKey'].map(modifier => new f.dom.window.KeyboardEvent('keydown', { key: 'Home', [modifier]: true, cancelable: true })),
+    ];
+    for (const event of events) {
+        f.browser.dispatchEvent(event);
+        assert.equal(event.defaultPrevented, false);
+        assert.ok(f.root.classList.contains('home-reveal-pending'));
+    }
+    f.runTimer(1300);
+    f.runTimer(1500);
+    f.close();
+});
+for (const tag of ['input', 'textarea', 'select', 'button', 'editable']) {
+    test(`${tag} scroll-key semantics remain available and release the intro`, () => {
+        const f = fixture();
+        const control = f.browser.document.createElement(tag === 'editable' ? 'div' : tag);
+        if (tag === 'editable')
+            control.setAttribute('contenteditable', 'true');
+        f.browser.document.body.append(control);
+        const event = new f.dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+        control.dispatchEvent(event);
+        assert.equal(event.defaultPrevented, false);
+        assert.equal(f.root.className, '');
+        assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
+        f.close();
+    });
+}
+test('completion and lifecycle escapes preserve pre-existing inline style declarations', () => {
+    for (const escape of [false, true]) {
+        const f = fixture({ inlineStyles: true });
+        const rootStyle = f.root.getAttribute('style');
+        const bodyStyle = f.browser.document.body.getAttribute('style');
+        f.complete();
+        f.fade();
+        if (escape)
+            f.browser.dispatchEvent(new f.dom.window.Event('pagehide'));
+        else {
+            f.runTimer(1300);
+            f.runTimer(1500);
+        }
+        assert.equal(f.root.getAttribute('style'), rootStyle.replace(/ --home-intro-header-space: [^;]+;/, ''));
+        assert.equal(f.browser.document.body.getAttribute('style'), bodyStyle);
+        assert.equal(f.root.style.getPropertyValue('--home-intro-header-space'), '');
+        assert.equal(f.timers.size, 0);
+        f.close();
+    }
 });

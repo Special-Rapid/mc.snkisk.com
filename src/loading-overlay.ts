@@ -63,12 +63,32 @@
         }
         document.addEventListener("sitepreferencescontentready", measureHeader, listenerOptions);
         window.addEventListener("resize", finishHomeReveal, listenerOptions);
-        window.addEventListener("pointerdown", finishHomeReveal, listenerOptions);
-        window.addEventListener("scroll", () => {
-            if (window.scrollY > 0) finishHomeReveal();
-        }, { ...listenerOptions, passive: true });
-        // Keyboard navigation and restored pages must never wait for decoration.
-        window.addEventListener("keydown", finishHomeReveal, listenerOptions);
+        const interactiveTarget = (target: EventTarget | null) => target instanceof Element &&
+            target.closest("a[href], button, input, select, textarea, summary, [role='button'], [contenteditable]:not([contenteditable='false'])");
+        // A touch/scrollbar press is a scroll intention, not an intro skip.
+        // Actual controls and keyboard/assistive focus still release decoration.
+        window.addEventListener("pointerdown", (event) => {
+            if (interactiveTarget(event.target)) finishHomeReveal();
+        }, { ...listenerOptions, capture: true });
+        document.addEventListener("focusin", finishHomeReveal, listenerOptions);
+        window.addEventListener("wheel", (event) => {
+            if (!event.ctrlKey && !event.metaKey) event.preventDefault();
+        }, { ...listenerOptions, passive: false });
+        window.addEventListener("touchmove", (event) => {
+            if (event.touches.length === 1) event.preventDefault();
+        }, { ...listenerOptions, passive: false });
+        const scrollKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"]);
+        window.addEventListener("keydown", (event) => {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (scrollKeys.has(event.key) && !interactiveTarget(event.target)) {
+                event.preventDefault();
+                return;
+            }
+            finishHomeReveal();
+        }, listenerOptions);
+        window.addEventListener("hashchange", finishHomeReveal, listenerOptions);
+        window.addEventListener("pagehide", finishHomeReveal, listenerOptions);
+        // Restored pages must never inherit an intro or its scrolling lock.
         window.addEventListener("pageshow", (event) => {
             if (event.persisted) finishHomeReveal();
         }, listenerOptions);
