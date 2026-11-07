@@ -83,7 +83,7 @@
 
 .pvp-detail-page footer p,
 .pvp-detail-page footer a:not(.footer-social-link) {
-    color: var(--pvp-text-dim) !important;
+    color: var(--pvp-text) !important;
 }
 
 

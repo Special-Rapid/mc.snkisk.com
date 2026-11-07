@@ -553,3 +553,28 @@ footer a {
     font-size: 14px;
     line-height: 1.4;
 }
+
+/* Preference motion owns only this short-lived anchoring guard, not global transitions. */
+html[data-preference-language-moving] {
+    overflow-anchor: none;
+}
+
+/* Tint the live system canvas with its accent while retaining readable system text. */
+@supports (color: AccentColor) and (color: CanvasText) and (background-color: color-mix(in srgb, AccentColor 30%, Canvas)) {
+    :root[data-theme-source="auto"] {
+        --system-selection-surface: color-mix(in srgb, AccentColor 30%, Canvas);
+        --system-selection-text: CanvasText;
+    }
+
+    :root[data-theme-source="auto"] ::selection {
+        background-color: var(--system-selection-surface);
+        color: var(--system-selection-text);
+        text-shadow: none;
+    }
+
+    :root[data-theme-source="auto"] ::-moz-selection {
+        background-color: var(--system-selection-surface);
+        color: var(--system-selection-text);
+        text-shadow: none;
+    }
+}

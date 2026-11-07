@@ -10,7 +10,7 @@ interface PreferencesWindow extends Pick<DOMWindow, 'document' | 'navigator' | '
  SitePreferences: SitePreferencesApi; SiteDeferredMedia: Window['SiteDeferredMedia'];
  SiteSkeletonUI: Pick<Window['SiteSkeletonUI'], 'initWrapper'>;
  renderHeaderContent(target: HTMLElement): void; renderCtaContent(target: HTMLElement): void;
- matchMedia(): { matches: boolean; addEventListener(event: string, listener: (event: Pick<MediaQueryListEvent, 'matches'>) => void): void };
+ matchMedia(query?: string): { matches: boolean; addEventListener(event: string, listener: (event: Pick<MediaQueryListEvent, 'matches'>) => void): void };
 }
 
 
@@ -34,7 +34,7 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
         setItem(key: string, value: string) { if (storageThrows) throw new Error('storage unavailable'); store.set(key, value); },
         removeItem(key: string) { removals.push(key); if (storageThrows || removeThrows) throw new Error('storage unavailable'); store.delete(key); },
     } });
-    window.matchMedia = () => ({ matches: dark, addEventListener(_event: string, listener: (event: Pick<MediaQueryListEvent, 'matches'>) => void) { themeListener = listener; } });
+    window.matchMedia = (query?: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' ? false : dark, addEventListener(_event: string, listener: (event: Pick<MediaQueryListEvent, 'matches'>) => void) { if (query !== '(prefers-reduced-motion: reduce)') themeListener = listener; } });
     const document = window.document;
     const originalTitle = document.title;
     const originalDescription = document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content;
@@ -507,12 +507,14 @@ test('native selections retain legacy stored values on relaunch and independent 
     const saved = Object.fromEntries(first.store); first.dom.window.close();
     const ctx = await start({ saved, removeThrows: true });
     try {
+        assert.equal(ctx.document.documentElement.dataset.themeSource, 'manual');
         ctx.loadComponents();
         assert.equal(ctx.document.querySelector<HTMLSelectElement>('[data-theme-select]')!.value, 'dark');
         assert.equal(ctx.document.querySelector<HTMLSelectElement>('[data-language-select]')!.value, 'en');
         choose(ctx, 'language', 'system');
         assert.equal(state(ctx).languageSource, 'auto'); assert.equal(state(ctx).language, 'ja');
         assert.equal(state(ctx).themeSource, 'manual'); assert.equal(state(ctx).theme, 'dark');
+        assert.equal(ctx.document.documentElement.dataset.themeSource, 'manual');
         assert.deepEqual(ctx.removals, [languageKey]);
         assert.equal(ctx.store.get(languageKey), 'en', 'failure fixture retains persisted value but does not reapply it');
         assertNoReload(ctx);

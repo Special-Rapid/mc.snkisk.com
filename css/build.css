@@ -582,7 +582,7 @@
 
 .build-detail-page footer p,
 .build-detail-page footer a:not(.footer-social-link) {
-    color: rgba(255, 255, 255, 0.48) !important;
+    color: var(--build-text-dim) !important;
 }
 
 
