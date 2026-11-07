@@ -10,22 +10,113 @@
     if (!overlay) {
         return;
     }
+    // Decorative home-only reveal starts after the overlay is actually gone.
+    // Keep the existing tracker, buffer requirements and include waits untouched.
+    const root = document.documentElement;
+    const hasHomeHero = root.dataset.viewTheme === "home" &&
+        Boolean(document.querySelector(".firstview-text-container"));
+    let revealTimer = 0;
+    let cleanupTimer = 0;
+    let overlayHideStarted = false;
+    let overlayHidden = false;
+    let headerObserver;
+    let introEvents;
+    let isHomeRevealFinished = false;
+    function finishHomeReveal() {
+        if (isHomeRevealFinished)
+            return;
+        isHomeRevealFinished = true;
+        introEvents?.abort();
+        window.clearTimeout(revealTimer);
+        window.clearTimeout(cleanupTimer);
+        root.classList.remove("home-reveal-pending", "home-reveal-running");
+        root.style.removeProperty("--home-intro-header-space");
+        headerObserver?.disconnect();
+    }
+    if (hasHomeHero && !prefersReducedMotion) {
+        introEvents = new AbortController();
+        const listenerOptions = { signal: introEvents.signal };
+        root.classList.add("home-reveal-pending");
+        const header = document.getElementById("site-header");
+        let headerSpace = 0;
+        const measureHeader = () => {
+            if (!root.classList.contains("home-reveal-pending") &&
+                !root.classList.contains("home-reveal-running"))
+                return;
+            const height = header?.getBoundingClientRect().height || 0;
+            // Avoid changing the framing under an already visible animation.
+            if (overlayHidden && Math.abs(height - headerSpace) > 0.5) {
+                finishHomeReveal();
+                return;
+            }
+            headerSpace = height;
+            root.style.setProperty("--home-intro-header-space", `${height}px`);
+        };
+        measureHeader();
+        if (header && window.ResizeObserver) {
+            headerObserver = new ResizeObserver(measureHeader);
+            headerObserver.observe(header);
+        }
+        document.addEventListener("sitepreferencescontentready", measureHeader, listenerOptions);
+        window.addEventListener("resize", finishHomeReveal, listenerOptions);
+        window.addEventListener("pointerdown", finishHomeReveal, listenerOptions);
+        window.addEventListener("scroll", () => {
+            if (window.scrollY > 0)
+                finishHomeReveal();
+        }, { ...listenerOptions, passive: true });
+        // Keyboard navigation and restored pages must never wait for decoration.
+        window.addEventListener("keydown", finishHomeReveal, listenerOptions);
+        window.addEventListener("pageshow", (event) => {
+            if (event.persisted)
+                finishHomeReveal();
+        }, listenerOptions);
+        window.matchMedia?.("(prefers-reduced-motion: reduce)")
+            .addEventListener?.("change", (event) => {
+            if (event.matches)
+                finishHomeReveal();
+        }, listenerOptions);
+        if (window.scrollY > 0 || window.location.hash)
+            finishHomeReveal();
+    }
+    function didHideOverlay() {
+        if (overlayHidden)
+            return;
+        overlayHidden = true;
+        overlay.dataset.loadingOverlayHidden = "true";
+        window.dispatchEvent(new CustomEvent("site:loading-overlay-hidden"));
+        if (!root.classList.contains("home-reveal-pending"))
+            return;
+        revealTimer = window.setTimeout(() => {
+            root.classList.replace("home-reveal-pending", "home-reveal-running");
+            cleanupTimer = window.setTimeout(finishHomeReveal, 1000);
+        }, 1300);
+    }
     function hideOverlayWithFallback(onHide) {
+        if (overlayHideStarted)
+            return;
+        overlayHideStarted = true;
+        let fallbackTimer = 0;
+        const complete = () => {
+            window.clearTimeout(fallbackTimer);
+            didHideOverlay();
+            onHide?.();
+        };
         if (prefersReducedMotion) {
             overlay.style.display = "none";
-            if (typeof onHide === "function") {
-                onHide();
-            }
+            complete();
             return;
         }
         if (window.jQuery) {
-            window.jQuery(overlay).delay(80).fadeOut(650, onHide);
+            // A stopped animation must not leave the home UI permanently hidden.
+            fallbackTimer = window.setTimeout(() => {
+                overlay.style.display = "none";
+                complete();
+            }, 1500);
+            window.jQuery(overlay).delay(80).fadeOut(650, complete);
             return;
         }
         overlay.style.display = "none";
-        if (typeof onHide === "function") {
-            onHide();
-        }
+        complete();
     }
     function createBarController() {
         const loadingProgress = overlay.querySelector("[data-loading-progress]");
