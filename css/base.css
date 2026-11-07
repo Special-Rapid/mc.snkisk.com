@@ -10,6 +10,8 @@
     --header-surface: #f2f2f2;
     --header-gap: 12px;
     --header-min-height: 80px;
+    --preferences-target-size: 44px;
+    --preferences-spacing: 6px;
     --header-brand-size: clamp(1rem, 3.3vw, 1.5rem);
     --font-display: "Pixelify Sans", sans-serif;
     --font-body: "Rajdhani", sans-serif;
@@ -98,6 +100,10 @@ body {
     letter-spacing: 0.08em;
     cursor: pointer;
     transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.site-preferences__control[hidden] {
+    display: none;
 }
 
 .site-preferences__control svg {
@@ -441,6 +447,27 @@ footer a {
     .footer-social-link {
         font-size: 12px;
     }
+}
+
+/* Footer preferences keep labels visible and targets comfortable at every width. */
+.site-preferences--footer {
+    max-width: calc(100% - 40px);
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--preferences-spacing);
+    margin-top: 10px;
+    padding: var(--preferences-spacing);
+    border-left: 1px solid rgba(51, 51, 51, 0.18);
+}
+
+.site-preferences--footer .site-preferences__control {
+    min-width: var(--preferences-target-size);
+    min-height: var(--preferences-target-size);
+    padding-inline: var(--header-gap);
+}
+
+.site-preferences--footer .site-preferences__text {
+    display: inline;
 }
 
 /* 05 Shared Utility */

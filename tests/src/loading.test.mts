@@ -82,6 +82,24 @@ test('component取得失敗時に同じbuild原本でnavを復旧し未知のpat
  await assert.rejects(window.SiteComponentInclude.loadIntoTarget(target, 'https://other.example/component.html'), /Unknown component/); value.window.close();
 });
 
+test('failed footer fetch restores exactly one complete preference group from the generated fallback', async () => {
+ const { value, window } = dom('<body><div id="header"></div><div id="footer"></div></body>');
+ try {
+  window.eval(source('component-fallbacks')); window.eval(source('component-include'));
+  window.SiteTextLoader = { load: async () => { throw new Error('network unavailable'); } };
+  const header = window.document.getElementById('header')!;
+  const footer = window.document.getElementById('footer')!;
+  await window.SiteComponentInclude.loadIntoTarget(header, 'components/header.html');
+  await window.SiteComponentInclude.loadIntoTarget(footer, 'components/footer.html');
+  assert.equal(header.querySelector('[data-site-preferences]'), null);
+  assert.equal(window.document.querySelectorAll('[data-site-preferences]').length, 1);
+  for (const selector of ['[data-theme-toggle]', '[data-language-toggle]', '[data-preferences-auto]']) {
+   assert.equal(footer.querySelectorAll(selector).length, 1);
+  }
+  assert.equal(footer.querySelector('[data-site-preferences]')!.getAttribute('role'), 'group');
+ } finally { value.window.close(); }
+});
+
 test('lazy画像は可視近傍で要求されるまで期限を開始しない', () => {
  const { value, window, timers } = dom('<body><div data-skeleton-media><img loading="lazy" src="/later.webp"></div></body>');
  const image = window.document.querySelector<HTMLImageElement>('img')!; image.loading = 'lazy'; Object.defineProperty(image, 'complete', { value: false });

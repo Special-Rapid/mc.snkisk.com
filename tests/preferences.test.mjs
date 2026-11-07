@@ -54,7 +54,12 @@ async function start({ page = 'build', languages = ['ja-JP'], saved = {}, storag
             window.renderCtaContent(cta);
             document.dispatchEvent(new window.CustomEvent('sitepreferencescontentready', { detail: { target: cta } }));
         }
-        return { header, cta };
+        const footer = document.querySelector('#footer');
+        if (footer) {
+            footer.innerHTML = read('components/footer.html');
+            document.dispatchEvent(new window.CustomEvent('sitepreferencescontentready', { detail: { target: footer } }));
+        }
+        return { header, cta, footer };
     }
     return { dom, window, document, store, errors, removals, loadComponents,
         originalTitle, originalDescription, hero, heroHtml, heroNodes, decoration, heroLinkText, alt, originalAlt,
@@ -401,6 +406,115 @@ test('翻訳の長さ境界をまたぐSelectionも方向と到達可能な範�
                 }
             }
         }
+    }
+    finally {
+        ctx.dom.window.close();
+    }
+});
+for (const page of ['home', 'survival', 'pvp', 'build', 'licenses']) {
+    test(`${page} keeps one preference group in the footer and preserves saved choices`, async () => {
+        const ctx = await start({ page, saved: { [languageKey]: 'en', [themeKey]: 'dark' } });
+        try {
+            const { header, footer } = ctx.loadComponents();
+            assert.equal(header.querySelector('[data-site-preferences]'), null);
+            assert.equal(ctx.document.querySelectorAll('[data-site-preferences]').length, 1);
+            const group = footer.querySelector('[data-site-preferences]');
+            assert.equal(group.getAttribute('role'), 'group');
+            assert.equal(state(ctx).language, 'en');
+            assert.equal(state(ctx).theme, 'dark');
+            const language = group.querySelector('[data-language-toggle]');
+            const theme = group.querySelector('[data-theme-toggle]');
+            language.focus();
+            language.click();
+            assert.equal(ctx.document.activeElement, language);
+            assert.equal(ctx.store.get(languageKey), 'ja');
+            theme.click();
+            assert.equal(ctx.store.get(themeKey), 'light');
+            const auto = group.querySelector('[data-preferences-auto]');
+            assert.equal(auto.hidden, false);
+            auto.focus();
+            auto.click();
+            assert.equal(auto.hidden, true);
+            assert.equal(ctx.document.activeElement, theme);
+            assert.equal(state(ctx).languageSource, 'auto');
+            assert.equal(state(ctx).themeSource, 'auto');
+            assertNoReload(ctx);
+        }
+        finally {
+            ctx.dom.window.close();
+        }
+    });
+}
+test('hidden automatic controls stay out of layout until a manual preference exists', async () => {
+    const ctx = await start();
+    try {
+        ctx.loadComponents();
+        const style = ctx.document.createElement('style');
+        style.textContent = read('css/base.css');
+        ctx.document.head.appendChild(style);
+        const auto = ctx.document.querySelector('[data-preferences-auto]');
+        assert.equal(auto.hidden, true);
+        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'none');
+        const theme = ctx.document.querySelector('[data-theme-toggle]');
+        theme.click();
+        assert.equal(auto.hidden, false);
+        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'inline-flex');
+        auto.click();
+        assert.equal(ctx.dom.window.getComputedStyle(auto).display, 'none');
+    }
+    finally {
+        ctx.dom.window.close();
+    }
+});
+for (const visible of [true, false]) {
+    test(`direct footer language actions ${visible ? 'keep the visible group anchored' : 'do not scroll an offscreen group into view'}`, async () => {
+        const ctx = await start({ page: 'pvp' });
+        try {
+            const { footer } = ctx.loadComponents();
+            const group = footer.querySelector('[data-site-preferences]');
+            let y = visible ? 220 : 0;
+            const initialY = y;
+            Object.defineProperty(ctx.dom.window, 'scrollY', { configurable: true, get: () => y });
+            Object.defineProperty(ctx.dom.window, 'innerHeight', { configurable: true, value: 844 });
+            ctx.dom.window.scrollTo = ((_, top) => { y = top; });
+            group.getBoundingClientRect = () => {
+                const top = (ctx.document.documentElement.lang === 'en' ? 1138 : 1000) - y;
+                return { top, bottom: top + 44, height: 44 };
+            };
+            const before = group.getBoundingClientRect().top;
+            toggleLanguage(ctx);
+            assert.equal(y, initialY + (visible ? 138 : 0));
+            if (visible)
+                assert.equal(group.getBoundingClientRect().top, before);
+            toggleLanguage(ctx);
+            assert.equal(y, initialY);
+            toggleLanguage(ctx);
+            const auto = group.querySelector('[data-preferences-auto]');
+            auto.focus();
+            auto.click();
+            assert.equal(y, initialY);
+            assert.equal(ctx.document.activeElement, group.querySelector('[data-theme-toggle]'));
+            assertNoReload(ctx);
+        }
+        finally {
+            ctx.dom.window.close();
+        }
+    });
+}
+test('OS changes and programmatic preference reset preserve absolute scroll instead of moving to the footer', async () => {
+    const ctx = await start({ page: 'pvp' });
+    try {
+        const { footer } = ctx.loadComponents();
+        const group = footer.querySelector('[data-site-preferences]');
+        let y = 220;
+        Object.defineProperty(ctx.dom.window, 'scrollY', { configurable: true, get: () => y });
+        ctx.dom.window.scrollTo = ((_, top) => { y = top; });
+        group.getBoundingClientRect = () => ({ top: ctx.document.documentElement.lang === 'en' ? 918 : 780, bottom: 824 });
+        ctx.changeLanguages(['en-US']);
+        assert.equal(y, 220);
+        ctx.window.SitePreferences.resetToAutomatic();
+        assert.equal(y, 220);
+        assertNoReload(ctx);
     }
     finally {
         ctx.dom.window.close();

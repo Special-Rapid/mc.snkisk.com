@@ -555,7 +555,12 @@
         };
     }
 
-    function apply() {
+    function apply(scrollAnchor?: Element) {
+        const anchorBounds = scrollAnchor?.getBoundingClientRect();
+        // A footer action must stay in view when translated content above it
+        // changes height. Other updates retain the existing absolute scroll.
+        const anchorTop = anchorBounds && anchorBounds.bottom > 0 &&
+            anchorBounds.top < window.innerHeight ? anchorBounds.top : undefined;
         const restoreSelection = preserveSelection();
         const scrollX = window.scrollX;
         const scrollY = window.scrollY;
@@ -565,38 +570,50 @@
         updateLocalizedAttributes();
         updateControls();
         restoreSelection();
-        if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
+        const targetY = anchorTop !== undefined && scrollAnchor?.isConnected
+            ? window.scrollY + scrollAnchor.getBoundingClientRect().top - anchorTop
+            : scrollY;
+        if (window.scrollX !== scrollX || window.scrollY !== targetY) window.scrollTo(scrollX, targetY);
         document.dispatchEvent(new CustomEvent("sitepreferenceschange", { detail: { ...state } }));
     }
 
-    function setTheme(theme: unknown): void {
+    function setTheme(theme: unknown, scrollAnchor?: Element): void {
         if (!supportedThemes.has(theme)) return;
         state.theme = theme as Theme;
         state.themeSource = "manual";
         save(storageKeys.theme, theme as Theme);
-        apply();
+        apply(scrollAnchor);
     }
 
-    function setLanguage(language: unknown): void {
+    function setLanguage(language: unknown, scrollAnchor?: Element): void {
         if (!supportedLanguages.has(language)) return;
         state.language = language as Language;
         state.languageSource = "manual";
         save(storageKeys.language, language as Language);
-        apply();
+        apply(scrollAnchor);
+    }
+
+    function resetToAutomatic(scrollAnchor?: Element): void {
+        for (const key of Object.values(storageKeys)) {
+            try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
+        }
+        state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
+        apply(scrollAnchor);
     }
 
     document.addEventListener("click", (event) => {
         if (!(event.target instanceof Element)) return;
+        const scrollAnchor = event.target.closest(".site-preferences--footer") || undefined;
         const themeToggle = event.target.closest("[data-theme-toggle]");
         if (themeToggle) {
-            setTheme(state.theme === "dark" ? "light" : "dark");
+            setTheme(state.theme === "dark" ? "light" : "dark", scrollAnchor);
             return;
         }
         if (event.target.closest("[data-language-toggle]")) {
-            setLanguage(state.language === "ja" ? "en" : "ja");
+            setLanguage(state.language === "ja" ? "en" : "ja", scrollAnchor);
             return;
         }
-        if (event.target.closest("[data-preferences-auto]")) window.SitePreferences.resetToAutomatic();
+        if (event.target.closest("[data-preferences-auto]")) resetToAutomatic(scrollAnchor);
     });
 
     if (window.matchMedia) {
@@ -639,12 +656,6 @@
         translateText,
         localizeHeaderConfig,
         applyTextTranslations,
-        resetToAutomatic: () => {
-            for (const key of Object.values(storageKeys)) {
-                try { localStorage.removeItem(key); } catch (_) { /* Storage may be unavailable. */ }
-            }
-            state = { theme: systemTheme(), language: systemLanguage(), themeSource: "auto", languageSource: "auto" };
-            apply();
-        },
+        resetToAutomatic: () => resetToAutomatic(),
     };
 }());
