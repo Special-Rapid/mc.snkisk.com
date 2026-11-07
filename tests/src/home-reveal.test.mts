@@ -78,7 +78,7 @@ function fixture({ home = true, reduced = false, jquery = true, overlay = true, 
     };
 }
 
-test('home reveal waits for the actual overlay fade then 1300ms before the 1000ms reveal', () => {
+test('home reveal waits for the actual overlay fade then 1300ms before the 1500ms reveal', () => {
     const f = fixture();
     assert.ok(f.root.classList.contains('home-reveal-pending'));
     f.complete();
@@ -91,7 +91,7 @@ test('home reveal waits for the actual overlay fade then 1300ms before the 1000m
     f.runTimer(1300);
     assert.ok(f.root.classList.contains('home-reveal-running'));
     assert.equal(f.root.classList.contains('home-reveal-pending'), false);
-    f.runTimer(1000);
+    f.runTimer(1500);
     assert.equal(f.root.className, '');
     f.complete(); f.fade();
     assert.equal(f.hiddenEvents(), 1);
@@ -109,7 +109,7 @@ test('the stopped-fade safety timer begins only after load completion and remove
     assert.equal(f.hiddenEvents(), 1);
     f.fade();
     assert.equal(f.hiddenEvents(), 1);
-    f.runTimer(1300); f.runTimer(1000);
+    f.runTimer(1300); f.runTimer(1500);
     assert.equal(f.root.className, '');
     f.close();
 });
@@ -159,12 +159,12 @@ test('other pages and a missing overlay do not receive home reveal state', () =>
 test('without jQuery the actual display fallback still precedes the video-only interval', () => {
     const f = fixture({ jquery: false }); f.complete();
     assert.equal(f.browser.document.querySelector<HTMLElement>('[data-loading-overlay]')!.style.display, 'none');
-    f.runTimer(1300); f.runTimer(1000);
+    f.runTimer(1300); f.runTimer(1500);
     assert.equal(f.root.className, ''); assert.equal(f.timers.size, 0); f.close();
 });
 
 
-test('mobile header measurement stays live while loading and releases if framing changes after overlay exit', () => {
+test('flowing header measurement stays live while loading and releases if framing changes after overlay exit', () => {
     const f = fixture({ headerHeight: 82 });
     assert.equal(f.root.style.getPropertyValue('--home-intro-header-space'), '82px');
     f.resizeHeader(100);
@@ -190,7 +190,7 @@ test('restored scroll positions and fragment destinations skip the decorative in
 
 
 test('normal completion releases every intro listener and later scroll does no cleanup work', () => {
-    const f = fixture(); f.complete(); f.fade(); f.runTimer(1300); f.runTimer(1000);
+    const f = fixture(); f.complete(); f.fade(); f.runTimer(1300); f.runTimer(1500);
     assert.equal(f.introRegistrations.length, 7);
     assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
     const disconnects = f.observerDisconnects();

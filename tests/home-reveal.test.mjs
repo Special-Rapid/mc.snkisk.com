@@ -78,7 +78,7 @@ function fixture({ home = true, reduced = false, jquery = true, overlay = true, 
         reduceMotion: () => motion.dispatchEvent(Object.assign(new dom.window.Event('change'), { matches: true })),
         close: () => dom.window.close(), };
 }
-test('home reveal waits for the actual overlay fade then 1300ms before the 1000ms reveal', () => {
+test('home reveal waits for the actual overlay fade then 1300ms before the 1500ms reveal', () => {
     const f = fixture();
     assert.ok(f.root.classList.contains('home-reveal-pending'));
     f.complete();
@@ -91,7 +91,7 @@ test('home reveal waits for the actual overlay fade then 1300ms before the 1000m
     f.runTimer(1300);
     assert.ok(f.root.classList.contains('home-reveal-running'));
     assert.equal(f.root.classList.contains('home-reveal-pending'), false);
-    f.runTimer(1000);
+    f.runTimer(1500);
     assert.equal(f.root.className, '');
     f.complete();
     f.fade();
@@ -110,7 +110,7 @@ test('the stopped-fade safety timer begins only after load completion and remove
     f.fade();
     assert.equal(f.hiddenEvents(), 1);
     f.runTimer(1300);
-    f.runTimer(1000);
+    f.runTimer(1500);
     assert.equal(f.root.className, '');
     f.close();
 });
@@ -179,12 +179,12 @@ test('without jQuery the actual display fallback still precedes the video-only i
     f.complete();
     assert.equal(f.browser.document.querySelector('[data-loading-overlay]').style.display, 'none');
     f.runTimer(1300);
-    f.runTimer(1000);
+    f.runTimer(1500);
     assert.equal(f.root.className, '');
     assert.equal(f.timers.size, 0);
     f.close();
 });
-test('mobile header measurement stays live while loading and releases if framing changes after overlay exit', () => {
+test('flowing header measurement stays live while loading and releases if framing changes after overlay exit', () => {
     const f = fixture({ headerHeight: 82 });
     assert.equal(f.root.style.getPropertyValue('--home-intro-header-space'), '82px');
     f.resizeHeader(100);
@@ -215,7 +215,7 @@ test('normal completion releases every intro listener and later scroll does no c
     f.complete();
     f.fade();
     f.runTimer(1300);
-    f.runTimer(1000);
+    f.runTimer(1500);
     assert.equal(f.introRegistrations.length, 7);
     assert.ok(f.introRegistrations.every(entry => entry.signal?.aborted));
     const disconnects = f.observerDisconnects();

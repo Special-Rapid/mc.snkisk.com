@@ -88,7 +88,7 @@
             return;
         revealTimer = window.setTimeout(() => {
             root.classList.replace("home-reveal-pending", "home-reveal-running");
-            cleanupTimer = window.setTimeout(finishHomeReveal, 1000);
+            cleanupTimer = window.setTimeout(finishHomeReveal, 1500);
         }, 1300);
     }
     function hideOverlayWithFallback(onHide) {
